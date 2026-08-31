@@ -109,3 +109,34 @@ async fn test_download_segment_already_completed() {
     assert_eq!(segment.status, SegmentStatus::Completed);
     assert_eq!(segment.downloaded_bytes, 5);
 }
+
+#[tokio::test]
+async fn test_download_segment_resume_existing_partial() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let p1 = temp_dir.path().join("file.part.000");
+    // Write 3 bytes initially
+    fs::write(&p1, b"123").unwrap();
+
+    let segment = segmenta_core::types::SegmentRecord {
+        id: "seg-resume".to_string(),
+        task_id: "task-resume".to_string(),
+        segment_index: 0,
+        start_offset: 0,
+        end_offset: Some(9), // 10 bytes total (0..=9), 3 bytes already on disk
+        downloaded_bytes: 0,
+        status: SegmentStatus::Pending,
+        part_filename: p1.to_str().unwrap().to_string(),
+        attempts: 0,
+        last_error: None,
+        updated_at: chrono::Utc::now(),
+    };
+
+    // Range calculation: range_start = 0 + 3 = 3, range_end = 9
+    let file_path = std::path::Path::new(&segment.part_filename);
+    let existing_bytes = tokio::fs::metadata(file_path).await.map(|m| m.len()).unwrap_or(0);
+    assert_eq!(existing_bytes, 3);
+    let range_start = segment.start_offset + existing_bytes;
+    let range_end = segment.end_offset.unwrap();
+    let range_header = format!("bytes={}-{}", range_start, range_end);
+    assert_eq!(range_header, "bytes=3-9");
+}

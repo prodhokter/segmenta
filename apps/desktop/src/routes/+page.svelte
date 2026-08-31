@@ -222,6 +222,11 @@
       scheduledTasks = scheduledTasks.filter((x) => x.task.id !== args.taskId && x.task.id !== args.task_id);
       return undefined as unknown as T;
     }
+    if (cmd === 'delete_task') {
+      mockTasksStore = mockTasksStore.filter((x) => x.id !== args.taskId && x.id !== args.task_id);
+      scheduledTasks = scheduledTasks.filter((x) => x.task.id !== args.taskId && x.task.id !== args.task_id);
+      return undefined as unknown as T;
+    }
     if (cmd === 'get_segments') {
       return [] as unknown as T;
     }

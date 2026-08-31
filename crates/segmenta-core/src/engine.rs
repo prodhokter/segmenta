@@ -232,7 +232,7 @@ impl DownloadEngine {
         Ok(())
     }
 
-    pub async fn cancel_task(&self, task_id: &str) -> Result<(), String> {
+    pub async fn cancel_task(&self, task_id: &str, cleanup_partial: bool) -> Result<(), String> {
         let mut active = self.active_tasks.lock().await;
         if let Some(token) = active.remove(task_id) {
             token.cancel();
@@ -241,8 +241,39 @@ impl DownloadEngine {
         self.scheduler.mark_completed_or_inactive(task_id).await;
         let _ = self.scheduler.remove_from_queue(task_id).await;
 
+        if cleanup_partial {
+            if let Ok(Some(task)) = self.storage.get_task(task_id) {
+                let _ = tokio::fs::remove_dir_all(&task.temp_path).await;
+            }
+        }
+
         self.storage
             .update_task_status(task_id, TaskStatus::Cancelled, None)
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
+    pub async fn delete_task(&self, task_id: &str, delete_files: bool) -> Result<(), String> {
+        let mut active = self.active_tasks.lock().await;
+        if let Some(token) = active.remove(task_id) {
+            token.cancel();
+        }
+
+        self.scheduler.mark_completed_or_inactive(task_id).await;
+        let _ = self.scheduler.remove_from_queue(task_id).await;
+
+        if let Ok(Some(task)) = self.storage.get_task(task_id) {
+            // Always clean up temp directory
+            let _ = tokio::fs::remove_dir_all(&task.temp_path).await;
+
+            if delete_files {
+                let _ = tokio::fs::remove_file(&task.save_path).await;
+            }
+        }
+
+        self.storage
+            .delete_task(task_id)
             .map_err(|e| e.to_string())?;
 
         Ok(())
@@ -374,6 +405,38 @@ impl DownloadEngine {
             segments.push(single_seg);
         }
 
+        // On resume or start, inspect .part files on disk to synchronize exact downloaded_bytes and completion status
+        let mut total_disk_downloaded = 0u64;
+        for seg in &mut segments {
+            let part_path = std::path::Path::new(&seg.part_filename);
+            let disk_bytes = if part_path.exists() {
+                tokio::fs::metadata(part_path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+
+            seg.downloaded_bytes = disk_bytes;
+            let range_start = seg.start_offset + disk_bytes;
+            let range_end = seg.end_offset.unwrap_or(0);
+
+            if seg.end_offset.is_some() && range_start > range_end {
+                seg.status = SegmentStatus::Completed;
+            } else if disk_bytes > 0 {
+                seg.status = SegmentStatus::Pending;
+            }
+            seg.updated_at = Utc::now();
+
+            let _ = self.storage.save_segment(seg);
+            let _ = self.storage.update_segment_progress(task_id, seg.segment_index, disk_bytes);
+            total_disk_downloaded += disk_bytes;
+        }
+
+        let _ = self.storage.update_task_progress(task_id, total_disk_downloaded);
+        task.downloaded_size = total_disk_downloaded;
+
         let (tx, mut rx) = mpsc::channel::<(u32, u64)>(100);
         let mut handles = Vec::new();
 
@@ -407,10 +470,14 @@ impl DownloadEngine {
         let progress_sender_clone = progress_sender.clone();
         let mut task_state = task.clone();
         let task_id_str = task_id.to_string();
+        let initial_segments = segments.clone();
 
         let progress_handle = tokio::spawn(async move {
             let mut last_save = std::time::Instant::now();
             let mut segment_progress: HashMap<u32, u64> = HashMap::new();
+            for seg in &initial_segments {
+                segment_progress.insert(seg.segment_index, seg.downloaded_bytes);
+            }
 
             while let Some((seg_idx, bytes_for_seg)) = rx.recv().await {
                 segment_progress.insert(seg_idx, bytes_for_seg);

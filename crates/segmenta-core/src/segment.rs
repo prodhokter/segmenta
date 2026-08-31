@@ -209,6 +209,9 @@ pub async fn reassemble_segments(
     let mut buffer = vec![0u8; 64 * 1024];
 
     for part in part_files {
+        if !Path::new(part).exists() {
+            continue;
+        }
         let mut infile = File::open(part).await?;
         loop {
             let n = infile.read(&mut buffer).await?;

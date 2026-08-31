@@ -64,10 +64,49 @@ async fn test_engine_pause_and_cancel_task() {
     let paused_task = engine.get_task(&task_id).unwrap().unwrap();
     assert_eq!(paused_task.status, TaskStatus::Paused);
 
-    // Test cancel
-    engine.cancel_task(&task_id).await.unwrap();
+    // Test cancel without file cleanup
+    engine.cancel_task(&task_id, false).await.unwrap();
     let cancelled_task = engine.get_task(&task_id).unwrap().unwrap();
     assert_eq!(cancelled_task.status, TaskStatus::Cancelled);
+
+    // Test delete task
+    engine.delete_task(&task_id, true).await.unwrap();
+    let deleted_task = engine.get_task(&task_id).unwrap();
+    assert!(deleted_task.is_none());
+}
+
+#[tokio::test]
+async fn test_engine_cancel_with_partial_cleanup() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let db_path = temp_dir.path().join("engine_cleanup_test.db");
+    let storage = Storage::new(&db_path).unwrap();
+    let engine = DownloadEngine::new(storage, temp_dir.path().to_str().unwrap().to_string());
+
+    let task_id = engine
+        .add_task(
+            "https://example.com/test2.zip".to_string(),
+            "test2.zip".to_string(),
+            temp_dir
+                .path()
+                .join("test2.zip")
+                .to_str()
+                .unwrap()
+                .to_string(),
+            2,
+            HashMap::new(),
+        )
+        .await
+        .unwrap();
+
+    let task = engine.get_task(&task_id).unwrap().unwrap();
+    let part_path = std::path::Path::new(&task.temp_path).join("dummy.part");
+    std::fs::write(&part_path, b"partial data").unwrap();
+    assert!(part_path.exists());
+
+    engine.cancel_task(&task_id, true).await.unwrap();
+    let cancelled_task = engine.get_task(&task_id).unwrap().unwrap();
+    assert_eq!(cancelled_task.status, TaskStatus::Cancelled);
+    assert!(!part_path.exists());
 }
 
 #[tokio::test]

@@ -102,12 +102,29 @@ async fn resume_task(task_id: String, state: State<'_, AppState>) -> Result<(), 
 }
 
 #[tauri::command]
-async fn cancel_task(task_id: String, state: State<'_, AppState>) -> Result<(), String> {
+async fn cancel_task(
+    task_id: String,
+    cleanup_partial: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let engine = {
         let guard = state.engine.lock().map_err(|e| e.to_string())?;
         guard.clone()
     };
-    engine.cancel_task(&task_id).await
+    engine.cancel_task(&task_id, cleanup_partial.unwrap_or(false)).await
+}
+
+#[tauri::command]
+async fn delete_task(
+    task_id: String,
+    delete_files: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let engine = {
+        let guard = state.engine.lock().map_err(|e| e.to_string())?;
+        guard.clone()
+    };
+    engine.delete_task(&task_id, delete_files.unwrap_or(false)).await
 }
 
 #[tauri::command]
@@ -361,6 +378,7 @@ async fn main() {
             pause_task,
             resume_task,
             cancel_task,
+            delete_task,
             set_speed_limit,
             get_settings,
             save_settings,
