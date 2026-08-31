@@ -296,7 +296,8 @@ async fn probe_m3u8_variants(url: String) -> Result<Vec<VariantStream>, String> 
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let temp_dir = std::env::temp_dir().join("segmenta");
     let _ = std::fs::create_dir_all(&temp_dir);
     let db_path = temp_dir.join("segmenta.db");
