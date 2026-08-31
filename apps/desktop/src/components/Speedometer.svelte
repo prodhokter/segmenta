@@ -50,7 +50,7 @@
 
     // Subtle brand gradient
     const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, 'rgba(79, 70, 229, 0.35)');
+    grad.addColorStop(0, 'rgba(79, 70, 229, 0.45)');
     grad.addColorStop(1, 'rgba(79, 70, 229, 0.02)');
     ctx.fillStyle = grad;
     ctx.fill();
@@ -65,10 +65,10 @@
   });
 </script>
 
-<div class="bg-surface border border-border-light rounded-xl p-4 flex items-center justify-between shadow-ambient">
+<div class="bg-surface dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-4 flex items-center justify-between shadow-ambient">
   <div>
-    <span class="text-xs font-semibold uppercase tracking-wider text-subtle">Real-Time Throughput</span>
-    <div class="text-2xl font-bold font-mono text-heading mt-0.5 tracking-tight">{formatSpeed(currentSpeedBytes)}</div>
+    <span class="text-xs font-semibold uppercase tracking-wider text-subtle dark:text-slate-400">Real-Time Throughput</span>
+    <div class="text-2xl font-bold font-mono text-heading dark:text-white mt-0.5 tracking-tight">{formatSpeed(currentSpeedBytes)}</div>
   </div>
   <div class="relative">
     <canvas bind:this={canvas} width="160" height="48" class="rounded"></canvas>

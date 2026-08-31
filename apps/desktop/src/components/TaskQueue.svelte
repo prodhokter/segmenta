@@ -62,53 +62,53 @@
   function getStatusBadge(status: string) {
     switch (status) {
       case 'Downloading':
-        return { label: 'Downloading', bg: 'bg-primary-light text-primary', icon: DownloadCloud };
+        return { label: 'Downloading', bg: 'bg-primary-light dark:bg-indigo-950/60 text-primary dark:text-indigo-300', icon: DownloadCloud };
       case 'Completed':
-        return { label: 'Completed', bg: 'bg-secondary-light text-secondary-hover', icon: CheckCircle2 };
+        return { label: 'Completed', bg: 'bg-secondary-light dark:bg-cyan-950/60 text-secondary-hover dark:text-cyan-300', icon: CheckCircle2 };
       case 'Paused':
-        return { label: 'Paused', bg: 'bg-amber-100 text-amber-800', icon: Clock };
+        return { label: 'Paused', bg: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300', icon: Clock };
       case 'Failed':
-        return { label: 'Failed', bg: 'bg-rose-100 text-rose-800', icon: AlertCircle };
+        return { label: 'Failed', bg: 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300', icon: AlertCircle };
       default:
-        return { label: 'Queued', bg: 'bg-slate-100 text-slate-700', icon: Clock };
+        return { label: 'Queued', bg: 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300', icon: Clock };
     }
   }
 </script>
 
-<div class="flex flex-col h-full bg-surface rounded-xl border border-border-light shadow-ambient overflow-hidden">
+<div class="flex flex-col h-full bg-surface dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-ambient overflow-hidden">
   <!-- Toolbar: Category filters & search -->
-  <div class="p-3 border-b border-border-light flex flex-wrap items-center justify-between gap-3 bg-surface-elevated">
+  <div class="p-3 border-b border-border-light dark:border-border-dark flex flex-wrap items-center justify-between gap-3 bg-surface-elevated dark:bg-surface-darkelevated">
     <div class="flex items-center gap-1.5 overflow-x-auto text-xs font-semibold">
       <button
         onclick={() => (activeCategory = 'all')}
-        class="px-3 py-1.5 rounded-lg transition-all {activeCategory === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-surface hover:bg-slate-100 text-body border border-border-light'}"
+        class="px-3 py-1.5 rounded-lg transition-all {activeCategory === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-surface dark:bg-surface-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 border border-border-light dark:border-border-dark'}"
       >
         All ({tasks.length})
       </button>
       <button
         onclick={() => (activeCategory = 'video')}
-        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'video' ? 'bg-primary text-white shadow-sm' : 'bg-surface hover:bg-slate-100 text-body border border-border-light'}"
+        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'video' ? 'bg-primary text-white shadow-sm' : 'bg-surface dark:bg-surface-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 border border-border-light dark:border-border-dark'}"
       >
         <Video class="w-3.5 h-3.5" />
         Videos
       </button>
       <button
         onclick={() => (activeCategory = 'audio')}
-        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'audio' ? 'bg-primary text-white shadow-sm' : 'bg-surface hover:bg-slate-100 text-body border border-border-light'}"
+        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'audio' ? 'bg-primary text-white shadow-sm' : 'bg-surface dark:bg-surface-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 border border-border-light dark:border-border-dark'}"
       >
         <Music class="w-3.5 h-3.5" />
         Audio
       </button>
       <button
         onclick={() => (activeCategory = 'archives')}
-        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'archives' ? 'bg-primary text-white shadow-sm' : 'bg-surface hover:bg-slate-100 text-body border border-border-light'}"
+        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'archives' ? 'bg-primary text-white shadow-sm' : 'bg-surface dark:bg-surface-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 border border-border-light dark:border-border-dark'}"
       >
         <Archive class="w-3.5 h-3.5" />
         Archives
       </button>
       <button
         onclick={() => (activeCategory = 'documents')}
-        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'documents' ? 'bg-primary text-white shadow-sm' : 'bg-surface hover:bg-slate-100 text-body border border-border-light'}"
+        class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all {activeCategory === 'documents' ? 'bg-primary text-white shadow-sm' : 'bg-surface dark:bg-surface-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 border border-border-light dark:border-border-dark'}"
       >
         <FileText class="w-3.5 h-3.5" />
         Docs
@@ -120,7 +120,7 @@
         type="text"
         placeholder="Filter downloads..."
         bind:value={searchQuery}
-        class="px-3 py-1.5 text-xs bg-surface rounded-lg border border-border-light focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading placeholder-subtle w-48"
+        class="px-3 py-1.5 text-xs bg-surface dark:bg-surface-dark rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white placeholder-subtle dark:placeholder-zinc-500 w-48"
       />
     </div>
   </div>
@@ -128,13 +128,13 @@
   <!-- Task Table / List -->
   <div class="flex-1 overflow-y-auto">
     {#if filteredTasks.length === 0}
-      <div class="h-64 flex flex-col items-center justify-center text-center p-6 text-subtle">
-        <DownloadCloud class="w-10 h-10 text-slate-300 mb-2 stroke-[1.5]" />
-        <p class="text-sm font-semibold text-heading">No downloads in this view</p>
-        <p class="text-xs text-subtle mt-0.5">Add a new URL to begin fast segmented downloading</p>
+      <div class="h-64 flex flex-col items-center justify-center text-center p-6 text-subtle dark:text-slate-400">
+        <DownloadCloud class="w-10 h-10 text-slate-300 dark:text-zinc-600 mb-2 stroke-[1.5]" />
+        <p class="text-sm font-semibold text-heading dark:text-white">No downloads in this view</p>
+        <p class="text-xs text-subtle dark:text-slate-400 mt-0.5">Add a new URL to begin fast segmented downloading</p>
       </div>
     {:else}
-      <div class="divide-y divide-border-light">
+      <div class="divide-y divide-border-light dark:divide-border-dark">
         {#each filteredTasks as task (task.id)}
           {@const badge = getStatusBadge(task.status)}
           {@const pct = task.total_size && task.total_size > 0 ? Math.min(100, Math.round((task.downloaded_size / task.total_size) * 100)) : (task.status === 'Completed' ? 100 : 0)}
@@ -144,18 +144,18 @@
             role="button"
             onclick={() => onSelectTask(task.id)}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectTask(task.id); }}
-            class="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-surface-elevated transition-colors cursor-pointer {selectedTaskId === task.id ? 'bg-primary-light/30 border-l-4 border-primary' : ''}"
+            class="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-surface-elevated dark:hover:bg-zinc-800/60 transition-colors cursor-pointer {selectedTaskId === task.id ? 'bg-primary-light/30 dark:bg-indigo-950/40 border-l-4 border-primary' : ''}"
           >
             <div class="flex-1 min-w-0 pr-4">
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-xs px-2 py-0.5 rounded font-mono font-semibold {badge.bg}">
                   {badge.label}
                 </span>
-                <span class="text-sm font-semibold text-heading truncate font-sans">{task.filename}</span>
+                <span class="text-sm font-semibold text-heading dark:text-white truncate font-sans">{task.filename}</span>
               </div>
 
               <!-- Progress bar -->
-              <div class="w-full bg-slate-200 rounded-full h-2 my-1.5 overflow-hidden">
+              <div class="w-full bg-slate-200 dark:bg-zinc-800 rounded-full h-2 my-1.5 overflow-hidden">
                 <div
                   class="h-full rounded-full transition-all duration-300 {task.status === 'Completed' ? 'bg-secondary' : 'bg-primary'}"
                   style="width: {pct}%"
@@ -163,7 +163,7 @@
               </div>
 
               <!-- Metadata row -->
-              <div class="flex items-center gap-4 text-xs text-subtle font-mono">
+              <div class="flex items-center gap-4 text-xs text-subtle dark:text-slate-400 font-mono">
                 <span>{formatBytes(task.downloaded_size)} / {formatBytes(task.total_size)}</span>
                 <span>•</span>
                 <span>{pct}%</span>
@@ -185,7 +185,7 @@
                   type="button"
                   onclick={(e) => { e.stopPropagation(); onPause(task.id); }}
                   title="Pause download"
-                  class="p-2 rounded-lg bg-surface border border-border-light hover:bg-slate-100 text-heading transition-colors"
+                  class="p-2 rounded-lg bg-surface dark:bg-surface-dark border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white transition-colors"
                 >
                   <Pause class="w-4 h-4" />
                 </button>
@@ -204,7 +204,7 @@
                 type="button"
                 onclick={(e) => { e.stopPropagation(); onCancel(task.id); }}
                 title="Cancel & remove"
-                class="p-2 rounded-lg bg-surface border border-border-light hover:bg-rose-50 hover:text-rose-600 text-subtle transition-colors"
+                class="p-2 rounded-lg bg-surface dark:bg-surface-dark border border-border-light dark:border-border-dark hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 text-subtle dark:text-slate-400 transition-colors"
               >
                 <X class="w-4 h-4" />
               </button>
