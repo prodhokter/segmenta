@@ -17,3 +17,7 @@ rusqlite.workspace = true
 chrono.workspace = true
 reqwest.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+

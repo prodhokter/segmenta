@@ -1,56 +1,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod autostart;
+mod tray;
+
+use autostart::{is_launch_on_startup_enabled, set_launch_on_startup};
 use chrono::{DateTime, Utc};
 use segmenta_core::engine::DownloadEngine;
 use segmenta_core::media::{parse_m3u8, HlsPlaylist, VariantStream};
 use segmenta_core::scheduler::ScheduleRule;
 use segmenta_core::server::start_http_server;
 use segmenta_core::storage::Storage;
-use segmenta_core::types::{SegmentRecord, TaskRecord};
+use segmenta_core::types::{AppSettings, SegmentRecord, TaskRecord};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State, WindowEvent};
+use tray::setup_tray;
 
 struct AppState {
     engine: Mutex<DownloadEngine>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppSettings {
-    pub download_dir: String,
-    pub max_concurrent_downloads: usize,
-    pub default_segments: u32,
-    pub speed_limit_kb: u64,
-    pub theme: String,
-    pub auto_categorize: bool,
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        let default_download = dirs_fallback_download_dir();
-        Self {
-            download_dir: default_download,
-            max_concurrent_downloads: 3,
-            default_segments: 8,
-            speed_limit_kb: 0,
-            theme: "system".to_string(),
-            auto_categorize: true,
-        }
-    }
-}
-
-fn dirs_fallback_download_dir() -> String {
-    if let Some(user_dirs) = std::env::var_os("USERPROFILE") {
-        let p = std::path::PathBuf::from(user_dirs).join("Downloads");
-        return p.to_string_lossy().to_string();
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        let p = std::path::PathBuf::from(home).join("Downloads");
-        return p.to_string_lossy().to_string();
-    }
-    "C:\\Downloads".to_string()
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduledTaskItem {
@@ -268,6 +238,32 @@ fn list_scheduled(state: State<AppState>) -> Result<Vec<ScheduledTaskItem>, Stri
 }
 
 #[tauri::command]
+fn set_autostart(enable: bool, state: State<AppState>) -> Result<(), String> {
+    set_launch_on_startup(enable, false)?;
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    let mut settings = if let Ok(Some(json_str)) = engine.get_setting("app_settings") {
+        serde_json::from_str::<AppSettings>(&json_str).unwrap_or_default()
+    } else {
+        AppSettings::default()
+    };
+    settings.autostart = enable;
+    if let Ok(json_str) = serde_json::to_string(&settings) {
+        let _ = engine.save_setting("app_settings", &json_str);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_autostart() -> bool {
+    is_launch_on_startup_enabled()
+}
+
+#[tauri::command]
+fn exit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
 async fn probe_m3u8_variants(url: String) -> Result<Vec<VariantStream>, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -299,6 +295,11 @@ async fn probe_m3u8_variants(url: String) -> Result<Vec<VariantStream>, String> 
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let launch_minimized = args
+        .iter()
+        .any(|arg| arg == "--minimized" || arg == "--autostart");
+
     let temp_dir = std::env::temp_dir().join("segmenta");
     let _ = std::fs::create_dir_all(&temp_dir);
     let db_path = temp_dir.join("segmenta.db");
@@ -331,6 +332,24 @@ async fn main() {
     });
 
     tauri::Builder::default()
+        .setup(move |app| {
+            setup_tray(app.handle())?;
+            if let Some(window) = app.get_webview_window("main") {
+                if launch_minimized {
+                    let _ = window.hide();
+                } else {
+                    let _ = window.show();
+                }
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                // Prevent window destruction and hide to system tray
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .manage(AppState {
             engine: Mutex::new(engine),
         })
@@ -347,8 +366,12 @@ async fn main() {
             save_settings,
             schedule_task,
             list_scheduled,
-            probe_m3u8_variants
+            probe_m3u8_variants,
+            set_autostart,
+            get_autostart,
+            exit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
