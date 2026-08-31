@@ -23,9 +23,9 @@ function showToast(message: string, isSuccess = true) {
     toast.style.borderRadius = '10px';
     toast.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     toast.style.fontSize = '13px';
-    toast.style.fontWeight = '500';
+    toast.style.fontWeight = '600';
     toast.style.color = '#ffffff';
-    toast.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(99, 102, 241, 0.3)';
+    toast.style.boxShadow = '0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(79, 70, 229, 0.35)';
     toast.style.backdropFilter = 'blur(16px)';
     toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
     toast.style.transform = 'translateY(20px)';
@@ -119,7 +119,7 @@ function extractMediaSources(videoEl: HTMLVideoElement): { url: string; type: 'h
 function getCleanMediaTitle(): string {
   const isYouTube = window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be');
   if (isYouTube) {
-    const ytTitleEl = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, #title h1 yt-formatted-string, h1.title');
+    const ytTitleEl = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, #title h1 yt-formatted-string, h1.title, #container h1');
     if (ytTitleEl && ytTitleEl.textContent) {
       return ytTitleEl.textContent.trim().replace(/[\\/:*?"<>|]/g, '_').substring(0, 120);
     }
@@ -147,15 +147,15 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     return;
   }
 
-  // If overlay is already active and attached, simply update its position
+  // If overlay is already active and attached, simply return
   const existingOverlay = activeOverlayMap.get(videoEl);
-  if (existingOverlay && document.body.contains(existingOverlay)) {
+  if (existingOverlay && document.contains(existingOverlay)) {
     return;
   }
 
   const rect = videoEl.getBoundingClientRect();
   // Filter out tiny thumbnail previews or hidden zero-sized video elements
-  if (rect.width < 240 || rect.height < 140) return;
+  if (rect.width < 220 || rect.height < 120) return;
 
   const container = document.createElement('div');
   container.className = 'segmenta-media-grabber';
@@ -164,35 +164,35 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   container.style.display = 'flex';
   container.style.alignItems = 'center';
   container.style.gap = '6px';
-  container.style.background = 'rgba(15, 23, 42, 0.95)';
+  container.style.background = 'rgba(11, 15, 25, 0.94)';
   container.style.backdropFilter = 'blur(16px)';
-  container.style.border = '1px solid rgba(99, 102, 241, 0.45)';
+  container.style.border = '1px solid rgba(99, 102, 241, 0.5)';
   container.style.borderRadius = '8px';
-  container.style.padding = '4px 6px';
-  container.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(79, 70, 229, 0.25)';
+  container.style.padding = '3px 6px';
+  container.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(79, 70, 229, 0.35)';
   container.style.fontFamily = 'Plus Jakarta Sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   container.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
   container.style.userSelect = 'none';
-  container.style.opacity = '0.92';
+  container.style.opacity = '0.94';
 
   container.onmouseenter = () => { container.style.opacity = '1'; };
-  container.onmouseleave = () => { container.style.opacity = '0.92'; };
+  container.onmouseleave = () => { container.style.opacity = '0.94'; };
 
-  // Primary Action Button: "Download Video"
+  // Primary Action Pill: "⚡ Download Video"
   const btn = document.createElement('button');
   btn.className = 'segmenta-btn-download';
   btn.innerHTML = `
-    <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 11px; color: #ffffff; letter-spacing: -0.01em;">
+    <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 11.5px; color: #ffffff; letter-spacing: -0.01em;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
       </svg>
-      <span>Download</span>
+      <span>Download Video</span>
     </span>
   `;
   btn.style.background = 'linear-gradient(135deg, #4f46e5, #4338ca)';
   btn.style.color = '#ffffff';
-  btn.style.padding = '4px 8px';
-  btn.style.borderRadius = '5px';
+  btn.style.padding = '4px 9px';
+  btn.style.borderRadius = '6px';
   btn.style.border = 'none';
   btn.style.cursor = 'pointer';
   btn.style.transition = 'all 0.15s ease';
@@ -207,7 +207,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     btn.style.transform = 'translateY(0)';
   };
 
-  // Resolution / Quality dropdown
+  // Resolution / Quality dropdown [Quality ▼]
   const qualitySelect = document.createElement('select');
   qualitySelect.className = 'segmenta-quality-select';
   qualitySelect.style.background = 'rgba(30, 41, 59, 0.95)';
@@ -215,16 +215,17 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   qualitySelect.style.border = '1px solid rgba(255, 255, 255, 0.15)';
   qualitySelect.style.borderRadius = '5px';
   qualitySelect.style.fontSize = '11px';
-  qualitySelect.style.fontWeight = '500';
+  qualitySelect.style.fontWeight = '600';
   qualitySelect.style.padding = '3px 6px';
   qualitySelect.style.outline = 'none';
   qualitySelect.style.cursor = 'pointer';
 
   const options: { label: string; value: string }[] = [
-    { label: 'Auto (Best)', value: 'original' },
-    { label: '1080p', value: '1080p' },
-    { label: '720p', value: '720p' },
-    { label: 'Audio (.mp3)', value: 'audio' },
+    { label: 'Original / Best', value: 'original' },
+    { label: '1080p HD', value: '1080p' },
+    { label: '720p HD', value: '720p' },
+    { label: '480p SD', value: '480p' },
+    { label: 'Audio Only (.mp3)', value: 'audio' },
   ];
 
   options.forEach((opt) => {
@@ -236,10 +237,10 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     qualitySelect.appendChild(el);
   });
 
-  // Close / Dismiss Button (×)
+  // Close / Dismiss Button [×]
   const closeBtn = document.createElement('button');
   closeBtn.className = 'segmenta-btn-close';
-  closeBtn.title = 'Dismiss download overlay for this video';
+  closeBtn.title = 'Dismiss download overlay';
   closeBtn.innerHTML = `
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -279,7 +280,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     const isYouTube = window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be');
     const sources = extractMediaSources(videoEl);
     let targetSrc = '';
-    let targetType: 'hls' | 'dash' | 'direct' | 'blob' = 'direct';
+    let targetType: 'hls' | 'dash' | 'direct' | 'blob' | 'youtube' = 'direct';
 
     if (sources.length > 0) {
       const hlsSource = sources.find((s) => s.type === 'hls');
@@ -294,11 +295,11 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
 
     if ((!targetSrc || targetSrc.startsWith('blob:')) && isYouTube) {
       targetSrc = window.location.href;
-      targetType = 'direct';
+      targetType = 'youtube';
     }
 
     if (!targetSrc) {
-      showToast('Video URL not ready yet. Please play the video.', false);
+      showToast('Video URL not ready yet. Please click play.', false);
       return;
     }
 
@@ -309,7 +310,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     const filename = `${cleanTitle}_${selectedQuality}.${ext}`;
 
     btn.innerHTML = `
-      <span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-size: 11px; color: #ffffff;">
+      <span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: 11px; color: #ffffff;">
         <svg class="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
           <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"></path>
@@ -337,18 +338,18 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
           btn.innerHTML = `<span>Error</span>`;
           btn.style.background = '#dc2626';
         } else {
-          showToast(`Sent to Segmenta: "${filename}"`);
+          showToast(`Segmenta: Intercepted "${filename}"`);
           btn.innerHTML = `<span>Dispatched ✓</span>`;
           btn.style.background = '#059669';
         }
 
         setTimeout(() => {
           btn.innerHTML = `
-            <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 11px; color: #ffffff;">
+            <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 11.5px; color: #ffffff;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
               </svg>
-              <span>Download</span>
+              <span>Download Video</span>
             </span>
           `;
           btn.style.background = 'linear-gradient(135deg, #4f46e5, #4338ca)';
@@ -369,23 +370,23 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     }
 
     const r = videoEl.getBoundingClientRect();
-    if (r.width < 240 || r.height < 140 || window.getComputedStyle(videoEl).display === 'none' || window.getComputedStyle(videoEl).visibility === 'hidden') {
+    if (r.width < 220 || r.height < 120 || window.getComputedStyle(videoEl).display === 'none' || window.getComputedStyle(videoEl).visibility === 'hidden') {
       container.style.display = 'none';
       return;
     }
 
-    const playerParent = videoEl.closest('#movie_player') || videoEl.parentElement;
+    const playerParent = videoEl.closest('#movie_player') || videoEl.closest('.html5-video-player') || videoEl.parentElement;
     if (playerParent && window.getComputedStyle(playerParent).position !== 'static') {
       container.style.display = 'flex';
-      container.style.top = '10px';
-      container.style.left = '10px';
+      container.style.top = '12px';
+      container.style.left = '12px';
       if (container.parentElement !== playerParent) {
         playerParent.appendChild(container);
       }
     } else {
       container.style.display = 'flex';
-      container.style.top = `${window.scrollY + r.top + 8}px`;
-      container.style.left = `${window.scrollX + r.left + 8}px`;
+      container.style.top = `${window.scrollY + r.top + 10}px`;
+      container.style.left = `${window.scrollX + r.left + 10}px`;
       if (container.parentElement !== document.body) {
         document.body.appendChild(container);
       }
@@ -410,16 +411,16 @@ function scanMedia() {
     const videos = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
     videos.forEach((v) => {
       const r = v.getBoundingClientRect();
-      if (r.width >= 240 && r.height >= 140) {
+      if (r.width >= 220 && r.height >= 120) {
         injectDownloadOverlay(v);
       }
     });
-  }, 300);
+  }, 250);
 }
 
 scanMedia();
 
-// Observer for dynamic players (SPAs)
+// Observer for dynamic players in Single Page Applications
 const observer = new MutationObserver(() => {
   scanMedia();
 });
