@@ -20,7 +20,6 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     // Header & Brand
     'app.title': 'Segmenta',
     'app.tagline': 'High-Speed Modular Download Engine',
-    'app.version_badge': 'v0.1.0-alpha',
     'header.status_online': 'Engine Online',
     'header.status_active': 'Active',
     'header.autostart_on': 'Autostart On',
@@ -158,7 +157,6 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     // Header & Brand
     'app.title': 'Segmenta',
     'app.tagline': 'Mesin Unduh Modular Berkecepatan Tinggi',
-    'app.version_badge': 'v0.1.0-alpha',
     'header.status_online': 'Mesin Online',
     'header.status_active': 'Aktif',
     'header.autostart_on': 'Autostart Aktif',
@@ -296,7 +294,6 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     // Header & Brand
     'app.title': 'Segmenta',
     'app.tagline': 'Motor de Descarga Modular de Alta Velocidad',
-    'app.version_badge': 'v0.1.0-alpha',
     'header.status_online': 'Motor en línea',
     'header.status_active': 'Activo',
     'header.autostart_on': 'Inicio auto activado',
@@ -434,7 +431,6 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     // Header & Brand
     'app.title': 'Segmenta',
     'app.tagline': '极速模块化多连接下载引擎',
-    'app.version_badge': 'v0.1.0-alpha',
     'header.status_online': '引擎在线',
     'header.status_active': '活跃',
     'header.autostart_on': '开机自启 已开启',
@@ -572,7 +568,6 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     // Header & Brand
     'app.title': 'Segmenta',
     'app.tagline': '高速モジュラーダウンロードエンジン',
-    'app.version_badge': 'v0.1.0-alpha',
     'header.status_online': 'エンジン稼働中',
     'header.status_active': '実行中',
     'header.autostart_on': '自動起動 有効',

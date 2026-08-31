@@ -318,6 +318,35 @@ fn get_autostart() -> bool {
 }
 
 #[tauri::command]
+fn open_file_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let p = std::path::Path::new(&path);
+        if p.exists() {
+            let _ = Command::new("explorer").args(["/select,", &path]).spawn();
+        } else if let Some(parent) = p.parent() {
+            let _ = Command::new("explorer").arg(parent).spawn();
+        } else {
+            let _ = Command::new("explorer").arg(&path).spawn();
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let _ = Command::new("open").args(["-R", &path]).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        let p = std::path::Path::new(&path);
+        let dir = if p.is_dir() { &path } else { p.parent().and_then(|x| x.to_str()).unwrap_or(&path) };
+        let _ = Command::new("xdg-open").arg(dir).spawn();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn exit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -462,6 +491,7 @@ async fn main() {
             probe_m3u8_variants,
             set_autostart,
             get_autostart,
+            open_file_folder,
             exit_app
         ])
         .run(tauri::generate_context!())
