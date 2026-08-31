@@ -4,7 +4,7 @@ export interface TaskRecord {
   filename: string;
   save_path: string;
   temp_path: string;
-  status: 'Queued' | 'Downloading' | 'Paused' | 'Completed' | 'Failed' | 'Cancelled';
+  status: 'Queued' | 'Downloading' | 'Paused' | 'PausedByError' | 'Completed' | 'Failed' | 'Cancelled';
   total_size: number | null;
   downloaded_size: number;
   segments_count: number;
@@ -28,9 +28,36 @@ export interface SegmentRecord {
   start_offset: number;
   end_offset: number | null;
   downloaded_bytes: number;
-  status: 'Pending' | 'Downloading' | 'Completed' | 'Failed';
+  status: 'Pending' | 'Downloading' | 'Paused' | 'Completed' | 'Failed';
   part_filename: string;
   attempts: number;
   last_error: string | null;
   updated_at: string;
+}
+
+export interface AppSettings {
+  download_dir: string;
+  max_concurrent_downloads: number;
+  default_segments: number;
+  speed_limit_kb: number;
+  theme: string;
+  auto_categorize: boolean;
+}
+
+export interface ScheduleRule {
+  start_at: string | null;
+  stop_at: string | null;
+  auto_start_on_add: boolean;
+}
+
+export interface ScheduledTaskItem {
+  task: TaskRecord;
+  rule: ScheduleRule;
+}
+
+export interface VariantStream {
+  bandwidth: number | null;
+  resolution: string | null;
+  codecs: string | null;
+  url: string;
 }

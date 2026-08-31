@@ -15,4 +15,5 @@ segmenta-core = { path = "../../../crates/segmenta-core" }
 tokio.workspace = true
 rusqlite.workspace = true
 chrono.workspace = true
+reqwest.workspace = true
 

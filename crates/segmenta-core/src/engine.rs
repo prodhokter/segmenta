@@ -61,6 +61,14 @@ impl DownloadEngine {
         self.storage.list_tasks()
     }
 
+    pub fn save_setting(&self, key: &str, value_json: &str) -> rusqlite::Result<()> {
+        self.storage.save_setting(key, value_json)
+    }
+
+    pub fn get_setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
+        self.storage.get_setting(key)
+    }
+
     pub async fn add_task(
         &self,
         url: String,

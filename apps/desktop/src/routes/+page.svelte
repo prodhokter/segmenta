@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { TaskRecord, SegmentRecord } from '$lib/types';
+  import type { TaskRecord, SegmentRecord, AppSettings, ScheduledTaskItem, VariantStream } from '$lib/types';
   import Speedometer from '../components/Speedometer.svelte';
   import SegmentInspector from '../components/SegmentInspector.svelte';
   import TaskQueue from '../components/TaskQueue.svelte';
   import AddDownloadModal from '../components/AddDownloadModal.svelte';
+  import SettingsModal from '../components/SettingsModal.svelte';
+  import SchedulerModal from '../components/SchedulerModal.svelte';
   import {
     Plus,
     Gauge,
@@ -18,7 +20,9 @@
     CheckCircle2,
     Clock,
     FolderOpen,
-    Wifi
+    Wifi,
+    Settings,
+    Calendar
   } from 'lucide-svelte';
 
   // Tauri invoke helper with safe browser fallback
@@ -37,9 +41,20 @@
   let tasks: TaskRecord[] = $state([]);
   let selectedTaskId: string | null = $state(null);
   let selectedSegments: SegmentRecord[] = $state([]);
+  let scheduledTasks: ScheduledTaskItem[] = $state([]);
   let isAddModalOpen = $state(false);
+  let isSettingsModalOpen = $state(false);
+  let isSchedulerModalOpen = $state(false);
   let liveSpeedBytes = $state(0);
-  let speedLimitKb = $state(0); // 0 = unlimited
+
+  let settings: AppSettings = $state({
+    download_dir: 'C:\\Downloads',
+    max_concurrent_downloads: 3,
+    default_segments: 8,
+    speed_limit_kb: 0,
+    theme: 'system',
+    auto_categorize: true,
+  });
 
   // Mock store for web preview
   let mockTasksStore: TaskRecord[] = [
@@ -91,15 +106,28 @@
 
   async function mockInvoke<T>(cmd: string, args: Record<string, any>): Promise<T> {
     if (cmd === 'list_tasks') return [...mockTasksStore] as unknown as T;
-    if (cmd === 'add_task') {
+    if (cmd === 'get_settings') return { ...settings } as unknown as T;
+    if (cmd === 'save_settings') {
+      settings = { ...args.settings };
+      return undefined as unknown as T;
+    }
+    if (cmd === 'list_scheduled') return [...scheduledTasks] as unknown as T;
+    if (cmd === 'probe_m3u8_variants') {
+      return [
+        { bandwidth: 3500000, resolution: '1920x1080 (1080p)', codecs: 'avc1,mp4a', url: args.url },
+        { bandwidth: 1800000, resolution: '1280x720 (720p)', codecs: 'avc1,mp4a', url: args.url },
+        { bandwidth: 800000, resolution: '854x480 (480p)', codecs: 'avc1,mp4a', url: args.url },
+      ] as unknown as T;
+    }
+    if (cmd === 'add_task' || cmd === 'schedule_task') {
       const id = 'task-' + Math.random().toString(36).substring(2, 9);
       const newTask: TaskRecord = {
         id,
         url: args.url,
         filename: args.filename || 'download.bin',
-        save_path: args.save_path,
+        save_path: args.save_path || args.savePath || 'C:\\Downloads',
         temp_path: 'C:\\Temp\\' + id,
-        status: 'Downloading',
+        status: cmd === 'schedule_task' ? 'Queued' : 'Downloading',
         total_size: 104857600,
         downloaded_size: 0,
         segments_count: args.segments || 8,
@@ -116,6 +144,16 @@
         finished_at: null,
       };
       mockTasksStore.unshift(newTask);
+      if (cmd === 'schedule_task') {
+        scheduledTasks.push({
+          task: newTask,
+          rule: {
+            start_at: args.start_at || args.startAt || null,
+            stop_at: args.stop_at || args.stopAt || null,
+            auto_start_on_add: false,
+          },
+        });
+      }
       return id as unknown as T;
     }
     if (cmd === 'pause_task') {
@@ -130,12 +168,42 @@
     }
     if (cmd === 'cancel_task') {
       mockTasksStore = mockTasksStore.filter((x) => x.id !== args.taskId && x.id !== args.task_id);
+      scheduledTasks = scheduledTasks.filter((x) => x.task.id !== args.taskId && x.task.id !== args.task_id);
       return undefined as unknown as T;
     }
     if (cmd === 'get_segments') {
       return [] as unknown as T;
     }
     return undefined as unknown as T;
+  }
+
+  async function loadInitialSettings() {
+    try {
+      const s = await invokeCommand<AppSettings>('get_settings');
+      if (s) {
+        settings = s;
+        applyTheme(s.theme);
+      }
+    } catch (e) {
+      console.warn('Load settings error:', e);
+    }
+  }
+
+  function applyTheme(themeName: string) {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (themeName === 'dark') {
+      root.classList.add('dark');
+    } else if (themeName === 'light') {
+      root.classList.remove('dark');
+    } else {
+      // system
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    }
   }
 
   async function refreshTasks() {
@@ -147,6 +215,12 @@
           selectedTaskId = tasks[0].id;
         }
       }
+
+      const scheduled = await invokeCommand<ScheduledTaskItem[]>('list_scheduled');
+      if (scheduled) {
+        scheduledTasks = scheduled;
+      }
+
       // Calculate live throughput
       const downloadingCount = tasks.filter((t) => t.status === 'Downloading').length;
       if (downloadingCount > 0) {
@@ -185,6 +259,39 @@
     await refreshTasks();
   }
 
+  async function handleScheduleTask(data: {
+    url: string;
+    filename: string;
+    savePath: string;
+    segments: number;
+    startAt: string | null;
+    stopAt: string | null;
+  }) {
+    await invokeCommand('schedule_task', {
+      url: data.url,
+      filename: data.filename,
+      savePath: data.savePath,
+      save_path: data.savePath,
+      segments: data.segments,
+      startAt: data.startAt,
+      start_at: data.startAt,
+      stopAt: data.stopAt,
+      stop_at: data.stopAt,
+    });
+    await refreshTasks();
+  }
+
+  async function handleSaveSettings(newSettings: AppSettings) {
+    settings = newSettings;
+    applyTheme(newSettings.theme);
+    await invokeCommand('save_settings', { settings: newSettings });
+    await refreshTasks();
+  }
+
+  async function handleProbeM3u8(m3u8Url: string): Promise<VariantStream[]> {
+    return await invokeCommand<VariantStream[]>('probe_m3u8_variants', { url: m3u8Url });
+  }
+
   async function handlePause(taskId: string) {
     await invokeCommand('pause_task', { taskId, task_id: taskId });
     await refreshTasks();
@@ -204,12 +311,14 @@
   }
 
   async function handleSpeedLimitChange(val: number) {
-    speedLimitKb = val;
+    settings.speed_limit_kb = val;
     const limitBytes = val > 0 ? val * 1024 : null;
     await invokeCommand('set_speed_limit', { limitBytes, limit_bytes: limitBytes });
+    await invokeCommand('save_settings', { settings });
   }
 
   onMount(() => {
+    loadInitialSettings();
     refreshTasks();
     const interval = setInterval(refreshTasks, 1000);
     return () => clearInterval(interval);
@@ -243,7 +352,7 @@
         <Wifi class="w-3.5 h-3.5 text-secondary" />
         <span class="text-subtle font-medium">Throttler:</span>
         <select
-          value={speedLimitKb}
+          value={settings.speed_limit_kb}
           onchange={(e) => handleSpeedLimitChange(Number((e.target as HTMLSelectElement).value))}
           class="bg-transparent font-mono font-semibold text-heading focus:outline-none cursor-pointer"
         >
@@ -255,6 +364,31 @@
         </select>
       </div>
 
+      <!-- Schedule Modal Button -->
+      <button
+        onclick={() => (isSchedulerModalOpen = true)}
+        class="px-3 py-1.5 rounded-lg bg-surface-elevated hover:bg-slate-100 border border-border-light text-heading text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+        title="Schedule Downloads"
+      >
+        <Calendar class="w-3.5 h-3.5 text-secondary" />
+        Schedule
+        {#if scheduledTasks.length > 0}
+          <span class="ml-1 px-1.5 py-0.2 bg-secondary/15 text-secondary text-[10px] rounded-full font-mono font-bold">
+            {scheduledTasks.length}
+          </span>
+        {/if}
+      </button>
+
+      <!-- Settings Modal Button -->
+      <button
+        onclick={() => (isSettingsModalOpen = true)}
+        class="p-2 rounded-lg bg-surface-elevated hover:bg-slate-100 border border-border-light text-subtle hover:text-heading transition-all shadow-sm"
+        title="Preferences & Settings"
+      >
+        <Settings class="w-4 h-4" />
+      </button>
+
+      <!-- New Download Button -->
       <button
         onclick={() => (isAddModalOpen = true)}
         class="px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
@@ -329,7 +463,27 @@
   <!-- Add Download Modal Dialog -->
   <AddDownloadModal
     isOpen={isAddModalOpen}
+    defaultDownloadDir={settings.download_dir}
+    defaultSegments={settings.default_segments}
     onClose={() => (isAddModalOpen = false)}
     onSubmit={handleAddTask}
+    onProbeM3u8={handleProbeM3u8}
+  />
+
+  <!-- Preferences / Settings Modal -->
+  <SettingsModal
+    isOpen={isSettingsModalOpen}
+    {settings}
+    onClose={() => (isSettingsModalOpen = false)}
+    onSave={handleSaveSettings}
+  />
+
+  <!-- Scheduler Modal -->
+  <SchedulerModal
+    isOpen={isSchedulerModalOpen}
+    {scheduledTasks}
+    defaultDownloadDir={settings.download_dir}
+    onClose={() => (isSchedulerModalOpen = false)}
+    onSchedule={handleScheduleTask}
   />
 </div>
