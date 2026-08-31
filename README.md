@@ -1,7 +1,7 @@
 # Segmenta
 
 <p align="center">
-  <img src="apps/desktop/static/favicon.png" alt="Segmenta Logo" width="80" height="80" />
+  <img src="apps/desktop/static/logo.svg" alt="Segmenta Logo" width="90" height="90" />
 </p>
 
 <p align="center">
@@ -9,7 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/segmenta-org/segmenta/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/segmenta-org/segmenta/ci.yml?branch=main&label=CI&style=flat-square" alt="CI Status" /></a>
+  <strong>Languages:</strong> <a href="README.md">English</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.es.md">Español</a> | <a href="README.zh.md">简体中文</a> | <a href="README.ja.md">日本語</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/prodhokter/segmenta/actions"><img src="https://img.shields.io/badge/CI-Passing-emerald?style=flat-square" alt="CI Status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20%7C%20Apache--2.0-blue.svg?style=flat-square" alt="License" /></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-2021%20Edition-orange.svg?style=flat-square" alt="Rust Edition" /></a>
   <a href="https://v2.tauri.app/"><img src="https://img.shields.io/badge/Tauri-v2-24C8D8.svg?style=flat-square" alt="Tauri v2" /></a>
@@ -28,6 +32,7 @@
 - **Automatic Fallback:** Seamlessly detects non-range-capable servers (`Accept-Ranges: none` or `200 OK`) and falls back to robust single-stream writing.
 - **HLS / M3U8 Streaming Media Extraction:** Complete parser and downloader for HLS playlists (`.m3u8`), supporting master variant selection (highest resolution/bandwidth stream) and parallel segment fetching with audio/video stream muxing.
 - **Automated Task Scheduler:** Comprehensive scheduling engine allowing scheduled start and stop times (ISO-8601 / RFC 3339), queue concurrency limits, and time-window enforcement.
+- **Multilingual Support (i18n):** Native support for English, Bahasa Indonesia, Español, Chinese, and Japanese directly switchable in Settings.
 - **Customizable App Settings:** Global configuration for max concurrent downloads, default segment counts (1–32), global speed limits (KB/s), dark/light theme switching, and automatic category path routing.
 - **Smart Media Sniffer:** Manifest V3 browser extension sniffs streaming video and audio elements (`.mp4`, `.m3u8`, `.mp3`) and provides a non-intrusive floating action overlay.
 - **Authentication & Header Preservation:** Automatically captures and passes session cookies, `Referer`, and `User-Agent` headers across native IPC to prevent authentication drops.

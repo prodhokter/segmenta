@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { X, Settings, Folder, Sliders, Moon, Sun, Monitor, Layers, Gauge, FolderTree } from 'lucide-svelte';
+  import { X, Settings, Folder, Sliders, Moon, Sun, Monitor, Layers, Gauge, FolderTree, Globe } from 'lucide-svelte';
   import type { AppSettings } from '$lib/types';
+  import { t, SUPPORTED_LANGUAGES, type LanguageCode, setLanguage, getLanguage } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -17,6 +18,7 @@
   let speedLimitKb = $state(0);
   let theme = $state('system');
   let autoCategorize = $state(true);
+  let language = $state<LanguageCode>(getLanguage());
   let wasOpen = false;
 
   $effect(() => {
@@ -28,6 +30,7 @@
       speedLimitKb = settings.speed_limit_kb || 0;
       theme = settings.theme || 'system';
       autoCategorize = settings.auto_categorize ?? true;
+      language = (settings.language as LanguageCode) || getLanguage();
     } else if (!isOpen) {
       wasOpen = false;
     }
@@ -35,6 +38,7 @@
 
   function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
+    setLanguage(language);
     onSave({
       download_dir: downloadDir.trim(),
       max_concurrent_downloads: Number(maxConcurrent) || 3,
@@ -42,6 +46,7 @@
       speed_limit_kb: Number(speedLimitKb) || 0,
       theme,
       auto_categorize: autoCategorize,
+      language,
     });
     onClose();
   }
@@ -66,8 +71,8 @@
             <Settings class="w-4 h-4" />
           </div>
           <div>
-            <h3 class="font-bold text-sm text-heading dark:text-white">Preferences & Settings</h3>
-            <p class="text-xs text-subtle dark:text-slate-400">Configure download engine & interface</p>
+            <h3 class="font-bold text-sm text-heading dark:text-white">{t('modal.settings.title', language)}</h3>
+            <p class="text-xs text-subtle dark:text-slate-400">{t('modal.settings.sub', language)}</p>
           </div>
         </div>
         <button
@@ -80,10 +85,29 @@
 
       <!-- Form Body -->
       <form onsubmit={handleSubmit} class="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        <!-- Language Selection (Bilingual / Multilingual) -->
+        <div class="p-3 bg-surface-elevated dark:bg-surface-darkelevated rounded-xl border border-border-light dark:border-border-dark">
+          <label for="settings-language" class="block text-xs font-semibold text-heading dark:text-white mb-2 flex items-center gap-1.5">
+            <Globe class="w-3.5 h-3.5 text-primary dark:text-indigo-400" /> {t('modal.settings.lang_label', language)}
+          </label>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {#each SUPPORTED_LANGUAGES as langOpt}
+              <button
+                type="button"
+                onclick={() => { language = langOpt.code; setLanguage(langOpt.code); }}
+                class="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold transition-all {language === langOpt.code ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface dark:bg-zinc-900 border-border-light dark:border-border-dark text-body dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800'}"
+              >
+                <span>{langOpt.flag}</span>
+                <span class="truncate">{langOpt.nativeName}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
         <!-- Download Directory -->
         <div>
           <label for="settings-dir" class="block text-xs font-semibold text-heading dark:text-white mb-1 flex items-center gap-1.5">
-            <Folder class="w-3.5 h-3.5 text-primary dark:text-indigo-400" /> Default Download Directory
+            <Folder class="w-3.5 h-3.5 text-primary dark:text-indigo-400" /> {t('modal.settings.dir_label', language)}
           </label>
           <input
             id="settings-dir"
@@ -98,7 +122,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="p-3 bg-surface-elevated dark:bg-surface-darkelevated rounded-xl border border-border-light dark:border-border-dark">
             <label for="settings-concurrency" class="block text-xs font-semibold text-heading dark:text-white mb-1 flex items-center justify-between">
-              <span>Max Concurrent</span>
+              <span>{t('modal.settings.concurrency_label', language)}</span>
               <span class="font-mono text-primary dark:text-indigo-400 font-bold">{maxConcurrent} Tasks</span>
             </label>
             <input
@@ -110,12 +134,12 @@
               bind:value={maxConcurrent}
               class="w-full accent-primary mt-2"
             />
-            <span class="text-[11px] text-subtle dark:text-slate-400 mt-1 block">Parallel active downloads</span>
+            <span class="text-[11px] text-subtle dark:text-slate-400 mt-1 block">{t('modal.settings.concurrency_sub', language)}</span>
           </div>
 
           <div class="p-3 bg-surface-elevated dark:bg-surface-darkelevated rounded-xl border border-border-light dark:border-border-dark">
             <label for="settings-segments" class="block text-xs font-semibold text-heading dark:text-white mb-1 flex items-center justify-between">
-              <span>Default Segments</span>
+              <span>{t('modal.settings.default_segments_label', language)}</span>
               <span class="font-mono text-primary dark:text-indigo-400 font-bold">{defaultSegments} Slices</span>
             </label>
             <input
@@ -127,14 +151,14 @@
               bind:value={defaultSegments}
               class="w-full accent-primary mt-2"
             />
-            <span class="text-[11px] text-subtle dark:text-slate-400 mt-1 block">HTTP Range slices per task (1-32)</span>
+            <span class="text-[11px] text-subtle dark:text-slate-400 mt-1 block">{t('modal.settings.default_segments_sub', language)}</span>
           </div>
         </div>
 
         <!-- Speed Limit Presets -->
         <div>
           <label for="settings-speed-select" class="block text-xs font-semibold text-heading dark:text-white mb-1.5 flex items-center gap-1.5">
-            <Gauge class="w-3.5 h-3.5 text-secondary" /> Global Speed Limit Presets
+            <Gauge class="w-3.5 h-3.5 text-secondary" /> {t('modal.settings.speed_limit_label', language)}
           </label>
           <div class="grid grid-cols-3 gap-2">
             {#each speedPresets as preset}
@@ -152,7 +176,7 @@
         <!-- Theme Mode Selection -->
         <div>
           <span class="block text-xs font-semibold text-heading dark:text-white mb-1.5 flex items-center gap-1.5">
-            <Sliders class="w-3.5 h-3.5 text-subtle dark:text-slate-400" /> Interface Theme
+            <Sliders class="w-3.5 h-3.5 text-subtle dark:text-slate-400" /> {t('modal.settings.theme_label', language)}
           </span>
           <div class="grid grid-cols-3 gap-2">
             <button
@@ -160,21 +184,21 @@
               onclick={() => (theme = 'light')}
               class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all {theme === 'light' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface dark:bg-zinc-900 border-border-light dark:border-border-dark text-body dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800'}"
             >
-              <Sun class="w-3.5 h-3.5" /> Light
+              <Sun class="w-3.5 h-3.5" /> {t('modal.settings.theme_light', language)}
             </button>
             <button
               type="button"
               onclick={() => (theme = 'dark')}
               class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all {theme === 'dark' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface dark:bg-zinc-900 border-border-light dark:border-border-dark text-body dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800'}"
             >
-              <Moon class="w-3.5 h-3.5" /> Dark
+              <Moon class="w-3.5 h-3.5" /> {t('modal.settings.theme_dark', language)}
             </button>
             <button
               type="button"
               onclick={() => (theme = 'system')}
               class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all {theme === 'system' ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface dark:bg-zinc-900 border-border-light dark:border-border-dark text-body dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800'}"
             >
-              <Monitor class="w-3.5 h-3.5" /> System
+              <Monitor class="w-3.5 h-3.5" /> {t('modal.settings.theme_system', language)}
             </button>
           </div>
         </div>
@@ -186,8 +210,8 @@
               <FolderTree class="w-4 h-4" />
             </div>
             <div>
-              <div class="text-xs font-bold text-heading dark:text-white">Smart Auto-Categorization</div>
-              <div class="text-[11px] text-subtle dark:text-slate-400">Route files automatically to Video, Audio, Documents, etc.</div>
+              <div class="text-xs font-bold text-heading dark:text-white">{t('modal.settings.autocat_title', language)}</div>
+              <div class="text-[11px] text-subtle dark:text-slate-400">{t('modal.settings.autocat_sub', language)}</div>
             </div>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
@@ -207,13 +231,13 @@
             onclick={onClose}
             class="px-4 py-2 text-xs font-semibold rounded-lg bg-surface dark:bg-zinc-900 border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 transition-colors"
           >
-            Cancel
+            {t('modal.settings.cancel', language)}
           </button>
           <button
             type="submit"
             class="px-4 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-hover text-white shadow-sm transition-colors"
           >
-            Save Preferences
+            {t('modal.settings.save', language)}
           </button>
         </div>
       </form>

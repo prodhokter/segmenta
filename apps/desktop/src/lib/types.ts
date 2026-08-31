@@ -42,6 +42,7 @@ export interface AppSettings {
   speed_limit_kb: number;
   theme: string;
   auto_categorize: boolean;
+  language?: string;
 }
 
 export interface ScheduleRule {
