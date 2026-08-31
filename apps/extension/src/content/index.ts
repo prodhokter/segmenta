@@ -155,7 +155,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
 
   const rect = videoEl.getBoundingClientRect();
   // Filter out tiny thumbnail previews or hidden zero-sized video elements
-  if (rect.width < 220 || rect.height < 120) return;
+  if (rect.width < 180 || rect.height < 100) return;
 
   const container = document.createElement('div');
   container.className = 'segmenta-media-grabber';
@@ -163,7 +163,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   container.style.zIndex = '2147483640';
   container.style.display = 'flex';
   container.style.alignItems = 'center';
-  container.style.gap = '6px';
+  container.style.gap = '5px';
   container.style.background = 'rgba(11, 15, 25, 0.94)';
   container.style.backdropFilter = 'blur(16px)';
   container.style.border = '1px solid rgba(99, 102, 241, 0.5)';
@@ -178,9 +178,10 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   container.onmouseenter = () => { container.style.opacity = '1'; };
   container.onmouseleave = () => { container.style.opacity = '0.94'; };
 
-  // Primary Action Pill: "⚡ Download Video"
+  // Primary Action Pill: "⚡ Download Video" with 1-click execution
   const btn = document.createElement('button');
   btn.className = 'segmenta-btn-download';
+  btn.title = 'Download video with Segmenta acceleration';
   btn.innerHTML = `
     <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 11.5px; color: #ffffff; letter-spacing: -0.01em;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -272,7 +273,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     activeOverlayMap.delete(videoEl);
   };
 
-  // Handle Download trigger
+  // Handle Download trigger (1-click send to Segmenta)
   btn.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -299,7 +300,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     }
 
     if (!targetSrc) {
-      showToast('Video URL not ready yet. Please click play.', false);
+      showToast('Video stream not ready yet. Play video first.', false);
       return;
     }
 
@@ -370,7 +371,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     }
 
     const r = videoEl.getBoundingClientRect();
-    if (r.width < 220 || r.height < 120 || window.getComputedStyle(videoEl).display === 'none' || window.getComputedStyle(videoEl).visibility === 'hidden') {
+    if (r.width < 180 || r.height < 100 || window.getComputedStyle(videoEl).display === 'none' || window.getComputedStyle(videoEl).visibility === 'hidden') {
       container.style.display = 'none';
       return;
     }
@@ -407,11 +408,11 @@ let scanTimeout: any = null;
 function scanMedia() {
   clearTimeout(scanTimeout);
   scanTimeout = setTimeout(() => {
-    // Only target visible, substantial video elements
+    // Target visible, substantial video elements
     const videos = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
     videos.forEach((v) => {
       const r = v.getBoundingClientRect();
-      if (r.width >= 220 && r.height >= 120) {
+      if (r.width >= 180 && r.height >= 100) {
         injectDownloadOverlay(v);
       }
     });
@@ -425,3 +426,11 @@ const observer = new MutationObserver(() => {
   scanMedia();
 });
 observer.observe(document.body, { childList: true, subtree: true });
+
+// Listen for custom trigger from context menu or background script
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SEGMENTA_TRIGGER_SCAN') {
+    scanMedia();
+    showToast('Segmenta: Scanning page for video/audio...');
+  }
+});

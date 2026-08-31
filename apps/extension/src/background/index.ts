@@ -2,20 +2,20 @@ const NATIVE_HOST = 'com.segmenta.downloader';
 const DESKTOP_HTTP_ENDPOINT = 'http://127.0.0.1:45678/api/tasks';
 const DESKTOP_PING_ENDPOINT = 'http://127.0.0.1:45678/ping';
 
-// Interceptable file extensions (IDM-style comprehensive extensions list)
+// Comprehensive IDM-style interceptable file extensions list
 const INTERCEPT_EXTENSIONS = new Set([
-  // Archives & Disk Images
-  'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso', 'dmg', 'pkg', 'tgz', 'tbz2', 'z', 'cab', 'lz', 'lzma', 'lzh',
-  // Executables & Packages & Installers
-  'exe', 'msi', 'bin', 'deb', 'rpm', 'apk', 'appimage', 'jar', 'run', 'cmd', 'bat', 'vbs', 'sh',
-  // Documents & Spreadsheets & Presentations
-  'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'epub', 'mobi', 'csv', 'psd', 'ai', 'indd', 'txt', 'rtf', 'odt', 'ods', 'odp',
-  // Video Media
-  'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp', 'ts', 'm2ts', 'vob', 'ogv', 'f4v',
-  // Audio Media
-  'mp3', 'flac', 'wav', 'aac', 'ogg', 'wma', 'm4a', 'opus', 'aiff', 'alac', 'mid', 'midi',
-  // Torrents & Virtual Disk Images
-  'torrent', 'img', 'vhd', 'vhdx', 'vmdk', 'qcow2'
+  // Archives & Disk Images & Containers
+  'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso', 'dmg', 'pkg', 'tgz', 'tbz2', 'z', 'cab', 'lz', 'lzma', 'lzh', 'wim', 'swm', 'esd', 'vhd', 'vhdx', 'vmdk', 'qcow2', 'img',
+  // Executables & Installers & Scripts & Packages
+  'exe', 'msi', 'bin', 'deb', 'rpm', 'apk', 'appimage', 'jar', 'run', 'cmd', 'bat', 'vbs', 'ps1', 'sh', 'msix', 'appx', 'xapk', 'crx', 'xpi',
+  // Documents & Spreadsheets & Presentations & Publishing
+  'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'epub', 'mobi', 'azw3', 'csv', 'tsv', 'psd', 'ai', 'indd', 'txt', 'rtf', 'odt', 'ods', 'odp', 'pages', 'numbers', 'key',
+  // Video Media & Containers
+  'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp', 'ts', 'm2ts', 'mts', 'vob', 'ogv', 'f4v', 'divx', 'xvid', 'asf', 'rm', 'rmvb',
+  // Audio Media & Lossless
+  'mp3', 'flac', 'wav', 'aac', 'ogg', 'oga', 'wma', 'm4a', 'opus', 'aiff', 'alac', 'mid', 'midi', 'ape', 'wv', 'mka',
+  // Torrents & ROMs & Misc Binaries
+  'torrent', 'rom', 'nes', 'sfc', 'gba', 'nds', '3ds', 'nso', 'nsp', 'xci', 'cue', 'bin'
 ]);
 
 export interface StreamVariant {
@@ -71,6 +71,9 @@ export interface RecentDownloadItem {
 // In-memory tab streams cache (tabId -> StreamItem[])
 const tabStreamsMap = new Map<number, StreamItem[]>();
 
+// Track URLs currently being dispatched to prevent interception loops
+const inFlightDispatches = new Set<string>();
+
 // Store auto interception flag (default true)
 let autoIntercept = true;
 
@@ -102,13 +105,68 @@ chrome.webNavigation?.onCommitted?.addListener((details) => {
   }
 });
 
+// =========================================================================
+// Context Menu Integration: "Download with Segmenta"
+// =========================================================================
+function setupContextMenus() {
+  chrome.contextMenus?.removeAll(() => {
+    // 1. Download Link
+    chrome.contextMenus.create({
+      id: 'segmenta-download-link',
+      title: 'Download with Segmenta',
+      contexts: ['link'],
+    });
+
+    // 2. Download Media (Image / Video / Audio)
+    chrome.contextMenus.create({
+      id: 'segmenta-download-media',
+      title: 'Download Media with Segmenta',
+      contexts: ['image', 'video', 'audio'],
+    });
+
+    // 3. Download Current Page Media
+    chrome.contextMenus.create({
+      id: 'segmenta-download-page',
+      title: 'Grab All Media on this Page',
+      contexts: ['page'],
+    });
+  });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  setupContextMenus();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  setupContextMenus();
+});
+
+chrome.contextMenus?.onClicked.addListener((info, tab) => {
+  const pageUrl = tab?.url || info.pageUrl || '';
+
+  if (info.menuItemId === 'segmenta-download-link' && info.linkUrl) {
+    interceptAndDispatchUrl(info.linkUrl, pageUrl, undefined, tab?.id);
+  } else if (info.menuItemId === 'segmenta-download-media' && (info.srcUrl || info.linkUrl)) {
+    const targetUrl = info.srcUrl || info.linkUrl || '';
+    interceptAndDispatchUrl(targetUrl, pageUrl, undefined, tab?.id);
+  } else if (info.menuItemId === 'segmenta-download-page' && tab?.id) {
+    // Request content script to trigger grabber scan
+    chrome.scripting?.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        window.postMessage({ type: 'SEGMENTA_TRIGGER_SCAN' }, '*');
+      },
+    });
+  }
+});
+
 // Helper to record stream item for tab
 function recordDetectedStream(tabId: number, stream: StreamItem) {
   const list = tabStreamsMap.get(tabId) || [];
   if (!list.some((s) => s.url === stream.url)) {
     list.unshift(stream);
-    // Keep max 25 streams per tab
-    if (list.length > 25) list.pop();
+    // Keep max 30 streams per tab
+    if (list.length > 30) list.pop();
     tabStreamsMap.set(tabId, list);
 
     // Also persist detected streams to storage for active tab inspection
@@ -220,13 +278,214 @@ function isStreamOrChunkUrl(url: string, responseHeaders?: chrome.webRequest.Htt
   return { isMatch: false, type: 'direct' };
 }
 
-// WebRequest sniffer for HLS streams (.m3u8, mime types), DASH, YouTube streams, and video chunks
+// Extract filename from Content-Disposition header
+function getFilenameFromContentDisposition(headers?: chrome.webRequest.HttpHeader[]): string | undefined {
+  if (!headers) return undefined;
+  const cdHeader = headers.find((h) => h.name.toLowerCase() === 'content-disposition');
+  if (!cdHeader || !cdHeader.value) return undefined;
+
+  // e.g. attachment; filename="file.zip" or filename*=UTF-8''file.zip
+  const value = cdHeader.value;
+  const matchStar = /filename\*=UTF-8''([^;]+)/i.exec(value);
+  if (matchStar && matchStar[1]) {
+    try {
+      return decodeURIComponent(matchStar[1].trim());
+    } catch {
+      return matchStar[1].trim();
+    }
+  }
+
+  const matchQuoted = /filename="([^"]+)"/i.exec(value);
+  if (matchQuoted && matchQuoted[1]) {
+    return matchQuoted[1].trim();
+  }
+
+  const matchUnquoted = /filename=([^;]+)/i.exec(value);
+  if (matchUnquoted && matchUnquoted[1]) {
+    return matchUnquoted[1].trim().replace(/^["']|["']$/g, '');
+  }
+
+  return undefined;
+}
+
+// Helper to extract file extension from URL or filename
+function getFileExtension(url: string, filename?: string): string {
+  if (filename) {
+    const parts = filename.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  }
+
+  try {
+    const pathname = new URL(url).pathname;
+    const cleanPath = pathname.split('?')[0].split('#')[0];
+    const parts = cleanPath.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  } catch {
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    const parts = cleanUrl.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  }
+  return '';
+}
+
+// Determine if a URL / MIME / header matches interceptable download criteria
+function shouldInterceptDownload(url: string, mime?: string, headers?: chrome.webRequest.HttpHeader[], filename?: string): boolean {
+  if (!url || !url.startsWith('http')) return false;
+
+  // Ignore internal localhost ports to avoid looping requests
+  try {
+    const u = new URL(url);
+    if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  const ext = getFileExtension(url, filename);
+  if (ext && INTERCEPT_EXTENSIONS.has(ext)) {
+    return true;
+  }
+
+  // Check Content-Disposition attachment header
+  if (headers) {
+    const cdHeader = headers.find((h) => h.name.toLowerCase() === 'content-disposition');
+    if (cdHeader && cdHeader.value && cdHeader.value.toLowerCase().includes('attachment')) {
+      return true;
+    }
+  }
+
+  // Check MIME Types
+  if (mime) {
+    const m = mime.toLowerCase();
+    if (
+      m.startsWith('video/') ||
+      m.startsWith('audio/') ||
+      m.startsWith('application/x-') ||
+      m.startsWith('application/octet-stream') ||
+      m.includes('zip') ||
+      m.includes('rar') ||
+      m.includes('7z') ||
+      m.includes('tar') ||
+      m.includes('gzip') ||
+      m.includes('compressed') ||
+      m.includes('pdf') ||
+      m.includes('msword') ||
+      m.includes('officedocument') ||
+      m.includes('vnd.openxmlformats') ||
+      m.includes('executable') ||
+      m.includes('iso')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Show desktop/browser notification when Segmenta takes over a download
+function showSegmentaNotification(title: string, message: string) {
+  try {
+    if (chrome.notifications && chrome.notifications.create) {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: `Segmenta — ${title}`,
+        message,
+        priority: 2,
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to display browser notification:', err);
+  }
+}
+
+// Helper to extract cookies, headers, and immediately dispatch task to Segmenta Core
+export function interceptAndDispatchUrl(
+  downloadUrl: string,
+  referrerUrl?: string,
+  preferredFilename?: string,
+  tabId?: number,
+  callback?: (response: unknown) => void
+) {
+  if (!downloadUrl || !downloadUrl.startsWith('http')) return;
+
+  // Deduplicate rapid identical dispatches (within 2 seconds)
+  if (inFlightDispatches.has(downloadUrl)) return;
+  inFlightDispatches.add(downloadUrl);
+  setTimeout(() => inFlightDispatches.delete(downloadUrl), 2500);
+
+  let finalFilename = preferredFilename;
+  if (!finalFilename) {
+    try {
+      const parsedPath = new URL(downloadUrl).pathname;
+      const lastSeg = parsedPath.split('/').pop();
+      if (lastSeg && lastSeg.includes('.')) {
+        finalFilename = decodeURIComponent(lastSeg.split('?')[0].split('#')[0]);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!finalFilename) {
+    const ext = getFileExtension(downloadUrl);
+    finalFilename = ext ? `download.${ext}` : 'download.bin';
+  }
+
+  // Extract cookies for authentication and context preservation
+  chrome.cookies.getAll({ url: downloadUrl }, (cookies) => {
+    const cookieHeader = cookies ? cookies.map((c) => `${c.name}=${c.value}`).join('; ') : '';
+
+    const payload: NativeMessage = {
+      type: 'CREATE_TASK',
+      payload: {
+        url: downloadUrl,
+        filename: finalFilename,
+        headers: {
+          Cookie: cookieHeader,
+          'User-Agent': navigator.userAgent,
+          Referer: referrerUrl || '',
+        },
+        segments: 8,
+      },
+    };
+
+    // Save to recent downloads list in extension storage
+    saveRecentDownload({
+      id: String(Date.now()),
+      url: downloadUrl,
+      filename: finalFilename || 'download.bin',
+      timestamp: Date.now(),
+      status: 'Segmented Acceleration Active',
+    });
+
+    // Notify user
+    showSegmentaNotification(
+      'Download Intercepted',
+      `Segmenta has taken over: "${finalFilename}" with 8-segment acceleration.`
+    );
+
+    // Dispatch to Native Messaging Host and Desktop HTTP daemon
+    dispatchToNativeAndDesktop(payload, callback);
+  });
+}
+
+// =========================================================================
+// 1. WebRequest Layer: Early Sniffing & Header-based Interception
+// =========================================================================
 chrome.webRequest.onHeadersReceived.addListener(
   (details) => {
     if (!details.url || !details.url.startsWith('http')) return;
     const tabId = details.tabId;
     if (tabId < 0) return;
 
+    // A. Check for Streaming Media (HLS, DASH, YouTube, Direct Video Chunks)
     const streamCheck = isStreamOrChunkUrl(details.url, details.responseHeaders);
     if (streamCheck.isMatch) {
       const urlObj = new URL(details.url);
@@ -262,55 +521,30 @@ chrome.webRequest.onHeadersReceived.addListener(
 
       recordDetectedStream(tabId, stream);
     }
+
+    // B. Check for Content-Disposition attachment downloads on standard HTTP web requests
+    if (autoIntercept && details.responseHeaders) {
+      const cdFilename = getFilenameFromContentDisposition(details.responseHeaders);
+      let contentType = '';
+      const ctHeader = details.responseHeaders.find((h) => h.name.toLowerCase() === 'content-type');
+      if (ctHeader && ctHeader.value) contentType = ctHeader.value;
+
+      if (shouldInterceptDownload(details.url, contentType, details.responseHeaders, cdFilename)) {
+        // We will catch and cancel this via chrome.downloads.onCreated, but pre-record context here
+        const ext = getFileExtension(details.url, cdFilename);
+        if (ext && INTERCEPT_EXTENSIONS.has(ext)) {
+          // Keep note of resolved filename if available
+        }
+      }
+    }
   },
   { urls: ['<all_urls>'] },
   ['responseHeaders']
 );
 
-// Helper to extract file extension from URL or filename
-function getFileExtension(url: string, filename?: string): string {
-  if (filename) {
-    const parts = filename.split('.');
-    if (parts.length > 1) {
-      return parts.pop()!.toLowerCase().trim();
-    }
-  }
-
-  try {
-    const pathname = new URL(url).pathname;
-    const cleanPath = pathname.split('?')[0].split('#')[0];
-    const parts = cleanPath.split('.');
-    if (parts.length > 1) {
-      return parts.pop()!.toLowerCase().trim();
-    }
-  } catch {
-    const cleanUrl = url.split('?')[0].split('#')[0];
-    const parts = cleanUrl.split('.');
-    if (parts.length > 1) {
-      return parts.pop()!.toLowerCase().trim();
-    }
-  }
-  return '';
-}
-
-// Show desktop/browser notification when Segmenta takes over a download
-function showSegmentaNotification(title: string, message: string) {
-  try {
-    if (chrome.notifications && chrome.notifications.create) {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon128.png',
-        title: `Segmenta — ${title}`,
-        message,
-        priority: 2,
-      });
-    }
-  } catch (err) {
-    console.warn('Failed to display browser notification:', err);
-  }
-}
-
-// Universal Download Interception: intercept all browser downloads via chrome.downloads.onCreated
+// =========================================================================
+// 2. Universal Download Interception: chrome.downloads.onCreated
+// =========================================================================
 chrome.downloads.onCreated.addListener(async (downloadItem) => {
   if (!autoIntercept) return;
   if (!downloadItem.url || !downloadItem.url.startsWith('http')) return;
@@ -325,13 +559,13 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
       downloadItem.mime.startsWith('video/') ||
       downloadItem.mime.startsWith('audio/') ||
       downloadItem.mime.startsWith('application/x-') ||
+      downloadItem.mime.startsWith('application/octet-stream') ||
       downloadItem.mime.includes('zip') ||
       downloadItem.mime.includes('rar') ||
       downloadItem.mime.includes('7z') ||
       downloadItem.mime.includes('tar') ||
       downloadItem.mime.includes('gzip') ||
       downloadItem.mime.includes('compressed') ||
-      downloadItem.mime.includes('octet-stream') ||
       downloadItem.mime.includes('pdf') ||
       downloadItem.mime.includes('msword') ||
       downloadItem.mime.includes('officedocument') ||
@@ -344,7 +578,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     return;
   }
 
-  // Cancel and erase browser single-threaded download immediately
+  // Instantly cancel and erase browser download to prevent browser Save-As dialog holding the file
   try {
     chrome.downloads.cancel(downloadItem.id, () => {
       if (chrome.runtime.lastError) {
@@ -367,7 +601,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
       const parsedPath = new URL(downloadItem.url).pathname;
       const lastSeg = parsedPath.split('/').pop();
       if (lastSeg && lastSeg.includes('.')) {
-        finalFilename = decodeURIComponent(lastSeg);
+        finalFilename = decodeURIComponent(lastSeg.split('?')[0].split('#')[0]);
       }
     } catch {
       // ignore url parse error
@@ -377,43 +611,8 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     finalFilename = ext ? `download.${ext}` : 'download.bin';
   }
 
-  // Extract full cookies, Referer, and User-Agent
-  chrome.cookies.getAll({ url: downloadItem.url }, (cookies) => {
-    const cookieHeader = cookies ? cookies.map((c) => `${c.name}=${c.value}`).join('; ') : '';
-
-    const payload: NativeMessage = {
-      type: 'CREATE_TASK',
-      payload: {
-        url: downloadItem.url,
-        filename: finalFilename,
-        headers: {
-          Cookie: cookieHeader,
-          'User-Agent': navigator.userAgent,
-          Referer: downloadItem.referrer || '',
-        },
-        segments: 8,
-      },
-    };
-
-    // Save to recent downloads
-    saveRecentDownload({
-      id: String(downloadItem.id || Date.now()),
-      url: downloadItem.url,
-      filename: finalFilename,
-      fileSize: downloadItem.fileSize ? formatFileSize(downloadItem.fileSize) : undefined,
-      timestamp: Date.now(),
-      status: 'Interception Active',
-    });
-
-    // Notify user via browser notification
-    showSegmentaNotification(
-      'Download Intercepted',
-      `Segmenta has taken over: "${finalFilename}" with 8-segment acceleration.`
-    );
-
-    // Dispatch CREATE_TASK to Segmenta Native Messaging Host & 127.0.0.1:45678
-    dispatchToNativeAndDesktop(payload);
-  });
+  // Extract cookies and context, then dispatch
+  interceptAndDispatchUrl(downloadItem.url, downloadItem.referrer, finalFilename);
 });
 
 function formatFileSize(bytes: number): string {
