@@ -36,6 +36,7 @@
   let autoCategorize = $state(true);
   let autostart = $state(false);
   let minimizeToTray = $state(true);
+  let showProgressDialog = $state(true);
   let language = $state<LanguageCode>(getLanguage());
   let wasOpen = false;
 
@@ -50,6 +51,7 @@
       autoCategorize = settings.auto_categorize ?? true;
       autostart = settings.autostart ?? false;
       minimizeToTray = settings.minimize_to_tray_on_close ?? true;
+      showProgressDialog = settings.show_progress_dialog ?? true;
       language = (settings.language as LanguageCode) || getLanguage();
     } else if (!isOpen) {
       wasOpen = false;
@@ -68,6 +70,7 @@
       auto_categorize: autoCategorize,
       autostart,
       start_minimized: autostart,
+      show_progress_dialog: showProgressDialog,
       minimize_to_tray_on_close: minimizeToTray,
       language,
     });
@@ -300,6 +303,27 @@
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-slate-200 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          <!-- Standalone Download Progress Popup Dialog Toggle -->
+          <div class="p-3.5 bg-surface-elevated dark:bg-surface-darkcard rounded-xl border border-border-light dark:border-border-dark flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-primary dark:text-indigo-400">
+                <Layers class="w-4 h-4" />
+              </div>
+              <div>
+                <div class="text-xs font-bold text-heading dark:text-white">{t('modal.settings.progress_popup_title', language)}</div>
+                <div class="text-[11px] text-subtle dark:text-zinc-400">{t('modal.settings.progress_popup_sub', language)}</div>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                bind:checked={showProgressDialog}
+                class="sr-only peer"
+              />
+              <div class="w-9 h-5 bg-slate-200 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
             </label>
           </div>
         </div>

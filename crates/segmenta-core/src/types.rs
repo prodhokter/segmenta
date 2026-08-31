@@ -125,6 +125,14 @@ pub struct AppSettings {
     pub autostart: bool,
     #[serde(default)]
     pub start_minimized: bool,
+    #[serde(default = "default_true")]
+    pub show_progress_dialog: bool,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AppSettings {
@@ -138,6 +146,8 @@ impl Default for AppSettings {
             auto_categorize: true,
             autostart: false,
             start_minimized: false,
+            show_progress_dialog: true,
+            language: Some("en".to_string()),
         }
     }
 }

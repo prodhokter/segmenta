@@ -123,6 +123,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'modal.settings.tray_sub': 'Keep active downloads running in background when window is closed',
     'modal.settings.autocat_title': 'Smart Auto-Categorization',
     'modal.settings.autocat_sub': 'Automatically sort downloads into Videos, Audio, Docs, and Archives',
+    'modal.settings.progress_popup_title': 'Popup Download Status Window',
+    'modal.settings.progress_popup_sub': 'Display compact IDM-style progress dialog when downloads begin',
     'modal.settings.cancel': 'Cancel',
     'modal.settings.save': 'Save Preferences',
 
@@ -248,6 +250,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'modal.settings.tray_sub': 'Biarkan unduhan aktif berjalan di latar belakang saat jendela ditutup',
     'modal.settings.autocat_title': 'Pengelompokan Kategori Otomatis',
     'modal.settings.autocat_sub': 'Otomatis kelompokkan ke folder Video, Audio, Dokumen, dan Arsip',
+    'modal.settings.progress_popup_title': 'Tampilkan Jendela Unduhan IDM',
+    'modal.settings.progress_popup_sub': 'Munculkan dialog status unduhan ringkas saat unduhan dimulai',
     'modal.settings.cancel': 'Batal',
     'modal.settings.save': 'Simpan Pengaturan',
 
@@ -373,6 +377,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'modal.settings.tray_sub': 'Mantener las descargas activas en segundo plano al cerrar la ventana',
     'modal.settings.autocat_title': 'Categorización Inteligente',
     'modal.settings.autocat_sub': 'Organizar descargas en Vídeos, Audio, Documentos y Archivos',
+    'modal.settings.progress_popup_title': 'Ventana emergente de descarga',
+    'modal.settings.progress_popup_sub': 'Mostrar cuadro de progreso compacto estilo IDM al iniciar descargas',
     'modal.settings.cancel': 'Cancelar',
     'modal.settings.save': 'Guardar Preferencias',
 
@@ -498,6 +504,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'modal.settings.tray_sub': '关闭主窗口后保持下载任务在后台托盘继续运行',
     'modal.settings.autocat_title': '智能文件分类存储',
     'modal.settings.autocat_sub': '自动将下载文件归类至视频、音频、文档、压缩包子目录',
+    'modal.settings.progress_popup_title': '弹出下载状态独立窗口',
+    'modal.settings.progress_popup_sub': '在下载开始时自动弹出紧凑型 IDM 风格进度对话框',
     'modal.settings.cancel': '取消',
     'modal.settings.save': '保存设置',
 
@@ -623,6 +631,8 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'modal.settings.tray_sub': 'ウィンドウを閉じてもダウンロードをタスクトレイで継続します',
     'modal.settings.autocat_title': 'スマート自動フォルダー分類',
     'modal.settings.autocat_sub': '動画、音楽、書類、圧縮ファイル等に自動整理して保存',
+    'modal.settings.progress_popup_title': 'ダウンロード進捗の個別表示',
+    'modal.settings.progress_popup_sub': 'ダウンロード開始時にコンパクトな IDM スタイルの進捗ウィンドウをポップアップ表示',
     'modal.settings.cancel': 'キャンセル',
     'modal.settings.save': '設定を保存',
 

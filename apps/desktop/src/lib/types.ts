@@ -44,6 +44,7 @@ export interface AppSettings {
   auto_categorize: boolean;
   autostart?: boolean;
   start_minimized?: boolean;
+  show_progress_dialog?: boolean;
   minimize_to_tray_on_close?: boolean;
   language?: string;
 }
