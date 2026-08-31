@@ -89,55 +89,42 @@ graph TD
 
 ---
 
-## Quick Start
+## Quick Start & Installation
 
-Segmenta offers two installation methods:
+Segmenta provides multiple ready-to-run installation methods:
 
-### Method 1: Automated One-Click Setup (Recommended for Windows)
+### 🚀 Method 1: Direct Executable (.EXE) & Double-Click Installer (Zero-Terminal)
 
-Run the included automated setup script in PowerShell to compile the native host, register browser registry keys, and build the extension in one step:
+For regular users who don't want to use terminals or build tools:
+1. **Direct Launch:** Double-click `bin/Segmenta.exe` in the repository to run the app immediately.
+2. **One-Click Installer (`INSTALL.bat`):** Double-click `INSTALL.bat` in the root folder:
+   - Automatically creates a **Desktop Shortcut** on your Windows desktop.
+   - Automatically registers the **Browser Extension Host** in the Windows Registry.
+   - Automatically launches **Segmenta.exe**.
 
+---
+
+### 🛠️ Method 2: One-Click Automated Build Script (PowerShell)
+
+To re-compile and register everything from source in one step:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1
 ```
 
-Once finished, simply start the desktop app:
-```bash
-npm run dev:desktop
-```
-
 ---
 
-### Method 2: Manual Developer Setup (Cross-Platform)
+### 💻 Method 3: Developer Setup & Hot-Reload
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/prodhokter/segmenta.git
-   cd segmenta
-   ```
+```bash
+# Install frontend dependencies
+npm install
 
-2. **Install dependencies & build:**
-   ```bash
-   npm install
-   cargo test --workspace
-   ```
+# Run workspace tests
+cargo test --workspace
 
-3. **Launch Desktop GUI:**
-   ```bash
-   npm run dev:desktop
-   ```
-
-4. **Build Desktop Standalone Installer (.exe / .msi):**
-   ```bash
-   npm --prefix apps/desktop run tauri build
-   ```
-   *The installer will be generated in `apps/desktop/src-tauri/target/release/bundle/nsis/Segmenta_0.1.0_x64-setup.exe`.*
-
-5. **Build Browser Extension:**
-   ```bash
-   npm run build:extension
-   ```
-   *Load the `apps/extension/dist` folder into `chrome://extensions` via "Load unpacked".*
+# Start Desktop in development mode with hot-reload
+npm run dev:desktop
+```
 
 ---
 
