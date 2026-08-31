@@ -28,6 +28,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Segmenta — High-Speed Download Manager",
         "width": 1120,
         "height": 740,

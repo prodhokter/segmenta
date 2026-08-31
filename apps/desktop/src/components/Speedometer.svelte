@@ -8,7 +8,7 @@
   let { currentSpeedBytes = 0 }: Props = $props();
 
   let canvas: HTMLCanvasElement | undefined = $state();
-  let history: number[] = $state(Array(30).fill(0));
+  let history: number[] = Array(30).fill(0);
 
   function formatSpeed(bytes: number): string {
     if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB/s';
@@ -18,7 +18,9 @@
   }
 
   $effect(() => {
-    history.push(currentSpeedBytes);
+    const speed = currentSpeedBytes;
+    if (!canvas) return;
+    history.push(speed);
     if (history.length > 30) history.shift();
     renderChart();
   });

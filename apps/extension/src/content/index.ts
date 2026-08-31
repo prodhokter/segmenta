@@ -1,8 +1,67 @@
 interface SniffedMedia {
   url: string;
-  type: 'hls' | 'dash' | 'direct' | 'blob';
+  type: 'hls' | 'dash' | 'direct' | 'blob' | 'youtube';
   title: string;
   quality?: string;
+}
+
+// Show a modern, dark-themed toast notification for user feedback
+function showToast(message: string, isSuccess = true) {
+  const toastId = 'segmenta-toast-container';
+  let toast = document.getElementById(toastId);
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = toastId;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '24px';
+    toast.style.right = '24px';
+    toast.style.zIndex = '2147483647';
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.gap = '10px';
+    toast.style.padding = '10px 16px';
+    toast.style.borderRadius = '10px';
+    toast.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    toast.style.fontSize = '13px';
+    toast.style.fontWeight = '500';
+    toast.style.color = '#ffffff';
+    toast.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(99, 102, 241, 0.3)';
+    toast.style.backdropFilter = 'blur(16px)';
+    toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+    toast.style.transform = 'translateY(20px)';
+    toast.style.opacity = '0';
+    toast.style.pointerEvents = 'none';
+    document.body.appendChild(toast);
+  }
+
+  const iconSvg = isSuccess
+    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+         <polyline points="22 4 12 14.01 9 11.01"></polyline>
+       </svg>`
+    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+         <circle cx="12" cy="12" r="10"></circle>
+         <line x1="12" y1="8" x2="12" y2="12"></line>
+         <line x1="12" y1="16" x2="12.01" y2="16"></line>
+       </svg>`;
+
+  toast.style.background = isSuccess
+    ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95))'
+    : 'linear-gradient(135deg, rgba(30, 15, 15, 0.95), rgba(45, 20, 20, 0.95))';
+  toast.style.border = isSuccess
+    ? '1px solid rgba(79, 70, 229, 0.5)'
+    : '1px solid rgba(239, 68, 68, 0.5)';
+
+  toast.innerHTML = `${iconSvg}<span>${message}</span>`;
+  toast.style.transform = 'translateY(0)';
+  toast.style.opacity = '1';
+
+  setTimeout(() => {
+    if (toast) {
+      toast.style.transform = 'translateY(20px)';
+      toast.style.opacity = '0';
+    }
+  }, 4000);
 }
 
 // Extract media sources from <video>, <audio>, <source>, blob URLs, and data attributes
@@ -47,13 +106,32 @@ function extractMediaSources(videoEl: HTMLVideoElement): { url: string; type: 'h
   });
 
   // 3. Custom attributes frequently used by video players (e.g. data-src, data-hls-src, data-dash-src, etc.)
-  const dataAttributes = ['data-src', 'data-hls-src', 'data-dash-src', 'data-orig-src', 'data-video-url'];
+  const dataAttributes = ['data-src', 'data-hls-src', 'data-dash-src', 'data-orig-src', 'data-video-url', 'data-url'];
   for (const attr of dataAttributes) {
     const val = videoEl.getAttribute(attr);
     if (val) addSource(val);
   }
 
   return sources;
+}
+
+// Extract page title or YouTube title cleanly
+function getCleanMediaTitle(): string {
+  const isYouTube = window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be');
+  if (isYouTube) {
+    // Try YouTube video title element
+    const ytTitleEl = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, #title h1 yt-formatted-string, h1.title');
+    if (ytTitleEl && ytTitleEl.textContent) {
+      return ytTitleEl.textContent.trim().replace(/[\\/:*?"<>|]/g, '_').substring(0, 120);
+    }
+  }
+
+  const rawTitle = document.title || 'Segmenta_Video';
+  return rawTitle
+    .replace(/\s*-\s*YouTube$/, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .trim()
+    .substring(0, 120);
 }
 
 // Function to inject download overlay over video or player container
@@ -142,6 +220,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     e.preventDefault();
     e.stopPropagation();
 
+    const isYouTube = window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be');
     const sources = extractMediaSources(videoEl);
     let targetSrc = '';
     let targetType: 'hls' | 'dash' | 'direct' | 'blob' = 'direct';
@@ -158,15 +237,20 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
       targetSrc = videoEl.currentSrc || videoEl.src;
     }
 
+    // Special handling for YouTube or blob-only streams: if targetSrc is blob or missing, fallback to current page URL
+    if ((!targetSrc || targetSrc.startsWith('blob:')) && isYouTube) {
+      targetSrc = window.location.href;
+      targetType = 'direct';
+    }
+
     if (!targetSrc) {
-      alert('Segmenta: Video source URL not detected yet. Please play the video for 1 second.');
+      showToast('Video source URL not detected yet. Please play the video for 1 second.', false);
       return;
     }
 
     const selectedQuality = qualitySelect.value;
     const isAudioOnly = selectedQuality === 'audio';
-    const pageTitle = document.title || 'Video';
-    const cleanTitle = pageTitle.replace(/[\\/:*?"<>|]/g, '_').substring(0, 100);
+    const cleanTitle = getCleanMediaTitle();
     const ext = isAudioOnly ? 'mp3' : 'mp4';
     const filename = `${cleanTitle}_${selectedQuality}.${ext}`;
 
@@ -192,8 +276,23 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
         quality: selectedQuality,
         format: ext,
       },
-      () => {
-        setTimeout(() => {
+      (res) => {
+        const error = chrome.runtime.lastError || (res && res.error);
+        if (error) {
+          showToast(`Dispatch failed: ${error.message || error}`, false);
+          btn.innerHTML = `
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; color: #ffffff;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>Error</span>
+            </span>
+          `;
+          btn.style.background = '#dc2626';
+        } else {
+          showToast(`Sent to Segmenta: "${filename}"`);
           btn.innerHTML = `
             <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 12px; color: #ffffff;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -202,18 +301,20 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
               <span>Dispatched</span>
             </span>
           `;
-          setTimeout(() => {
-            btn.innerHTML = `
-              <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; color: #ffffff;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                </svg>
-                <span>Download Video</span>
-              </span>
-            `;
-            btn.style.background = 'linear-gradient(135deg, #4f46e5, #4338ca)';
-          }, 3000);
-        }, 300);
+          btn.style.background = '#059669';
+        }
+
+        setTimeout(() => {
+          btn.innerHTML = `
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; color: #ffffff;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span>Download Video</span>
+            </span>
+          `;
+          btn.style.background = 'linear-gradient(135deg, #4f46e5, #4338ca)';
+        }, 2500);
       }
     );
   };
@@ -233,9 +334,23 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
       return;
     }
 
-    container.style.display = 'flex';
-    container.style.top = `${window.scrollY + rect.top + 10}px`;
-    container.style.left = `${window.scrollX + rect.left + 10}px`;
+    // Try anchoring inside player container on YouTube / video platforms if possible
+    const playerParent = videoEl.closest('#movie_player') || videoEl.parentElement;
+    if (playerParent && window.getComputedStyle(playerParent).position !== 'static') {
+      container.style.display = 'flex';
+      container.style.top = '12px';
+      container.style.left = '12px';
+      if (container.parentElement !== playerParent) {
+        playerParent.appendChild(container);
+      }
+    } else {
+      container.style.display = 'flex';
+      container.style.top = `${window.scrollY + rect.top + 10}px`;
+      container.style.left = `${window.scrollX + rect.left + 10}px`;
+      if (container.parentElement !== document.body) {
+        document.body.appendChild(container);
+      }
+    }
   }
 
   updatePosition();
@@ -245,8 +360,6 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   // Update on play / timeupdate to catch dynamic stream attachments
   videoEl.addEventListener('play', updatePosition);
   videoEl.addEventListener('loadeddata', updatePosition);
-
-  document.body.appendChild(container);
 }
 
 // Sniff iframe video players (YouTube, Vimeo, Dailymotion, custom embeds)

@@ -161,11 +161,25 @@ impl DownloadEngine {
             1
         };
 
+        // Ensure save_path points to the full target file path, not just the directory
+        let resolved_save_path = {
+            let p = std::path::Path::new(&save_path);
+            if p.is_dir()
+                || save_path.ends_with('/')
+                || save_path.ends_with('\\')
+                || !save_path.ends_with(&filename)
+            {
+                p.join(&filename).to_string_lossy().to_string()
+            } else {
+                save_path.clone()
+            }
+        };
+
         let task = TaskRecord {
             id: task_id.clone(),
             url,
             filename,
-            save_path,
+            save_path: resolved_save_path,
             temp_path: temp_task_dir.clone(),
             status: TaskStatus::Queued,
             total_size,
@@ -378,10 +392,27 @@ impl DownloadEngine {
         drop(tx);
 
         // Progress listener & state tracking
+        let storage_clone = self.storage.clone();
+        let progress_sender_clone = progress_sender.clone();
+        let mut task_state = task.clone();
+
         let progress_handle = tokio::spawn(async move {
-            let mut _total_downloaded: u64 = 0;
-            while let Some((_idx, bytes)) = rx.recv().await {
-                _total_downloaded += bytes;
+            let mut last_save = std::time::Instant::now();
+            let mut segment_progress: HashMap<u32, u64> = HashMap::new();
+
+            while let Some((seg_idx, bytes_for_seg)) = rx.recv().await {
+                segment_progress.insert(seg_idx, bytes_for_seg);
+                let total_downloaded: u64 = segment_progress.values().sum();
+
+                if last_save.elapsed() >= std::time::Duration::from_millis(500) {
+                    task_state.downloaded_size = total_downloaded;
+                    task_state.updated_at = Utc::now();
+                    let _ = storage_clone.save_task(&task_state);
+                    if let Some(ref sender) = progress_sender_clone {
+                        let _ = sender.send(task_state.clone());
+                    }
+                    last_save = std::time::Instant::now();
+                }
             }
         });
 

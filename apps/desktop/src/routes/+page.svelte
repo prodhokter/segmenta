@@ -25,15 +25,17 @@
     Calendar
   } from 'lucide-svelte';
 
+  import { invoke } from '@tauri-apps/api/core';
+
   // Tauri invoke helper with safe browser fallback
   async function invokeCommand<T>(cmd: string, args: Record<string, any> = {}): Promise<T> {
     try {
       if (typeof window !== 'undefined' && ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) {
-        const { invoke } = await import('@tauri-apps/api/core');
         return await invoke<T>(cmd, args);
       }
     } catch (e) {
-      console.warn(`[Tauri Invoke Fallback] ${cmd}:`, e);
+      console.error(`[Tauri Command Failed] ${cmd}:`, e);
+      throw e;
     }
     return mockInvoke<T>(cmd, args);
   }
@@ -230,7 +232,7 @@
       }
 
       if (selectedTaskId) {
-        const segs = await invokeCommand<SegmentRecord[]>('get_segments', { taskId: selectedTaskId, task_id: selectedTaskId });
+        const segs = await invokeCommand<SegmentRecord[]>('get_segments', { taskId: selectedTaskId });
         if (segs) selectedSegments = segs;
       }
     } catch (e) {
@@ -253,7 +255,6 @@
       url: data.url,
       filename: data.filename,
       savePath: data.savePath,
-      save_path: data.savePath,
       segments: data.segments,
     });
     await refreshTasks();
@@ -271,12 +272,9 @@
       url: data.url,
       filename: data.filename,
       savePath: data.savePath,
-      save_path: data.savePath,
       segments: data.segments,
       startAt: data.startAt,
-      start_at: data.startAt,
       stopAt: data.stopAt,
-      stop_at: data.stopAt,
     });
     await refreshTasks();
   }
@@ -293,17 +291,17 @@
   }
 
   async function handlePause(taskId: string) {
-    await invokeCommand('pause_task', { taskId, task_id: taskId });
+    await invokeCommand('pause_task', { taskId });
     await refreshTasks();
   }
 
   async function handleResume(taskId: string) {
-    await invokeCommand('resume_task', { taskId, task_id: taskId });
+    await invokeCommand('resume_task', { taskId });
     await refreshTasks();
   }
 
   async function handleCancel(taskId: string) {
-    await invokeCommand('cancel_task', { taskId, task_id: taskId });
+    await invokeCommand('cancel_task', { taskId });
     if (selectedTaskId === taskId) {
       selectedTaskId = null;
     }
@@ -313,7 +311,7 @@
   async function handleSpeedLimitChange(val: number) {
     settings.speed_limit_kb = val;
     const limitBytes = val > 0 ? val * 1024 : null;
-    await invokeCommand('set_speed_limit', { limitBytes, limit_bytes: limitBytes });
+    await invokeCommand('set_speed_limit', { limitBytes });
     await invokeCommand('save_settings', { settings });
   }
 

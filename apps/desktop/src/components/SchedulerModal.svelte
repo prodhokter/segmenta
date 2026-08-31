@@ -26,24 +26,17 @@
   let mode = $state<'custom' | 'night'>('night');
   let startTime = $state('');
   let stopTime = $state('');
+  let wasOpen = false;
 
   $effect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpen) {
+      wasOpen = true;
       if (!savePath) {
         savePath = defaultDownloadDir || 'C:\\Downloads';
       }
-      // Set default night mode (e.g. 02:00 AM to 06:00 AM tomorrow)
-      const now = new Date();
-      const nextNight = new Date(now);
-      if (now.getHours() >= 2) {
-        nextNight.setDate(nextNight.getDate() + 1);
-      }
-      nextNight.setHours(2, 0, 0, 0);
-      startTime = formatLocalDateTime(nextNight);
-
-      const nextMorning = new Date(nextNight);
-      nextMorning.setHours(6, 0, 0, 0);
-      stopTime = formatLocalDateTime(nextMorning);
+      setNightPreset();
+    } else if (!isOpen) {
+      wasOpen = false;
     }
   });
 
