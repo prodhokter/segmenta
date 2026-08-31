@@ -74,6 +74,12 @@ const tabStreamsMap = new Map<number, StreamItem[]>();
 // Track URLs currently being dispatched to prevent interception loops
 const inFlightDispatches = new Set<string>();
 
+// Track handled download item IDs to prevent duplicate handling across onCreated & onDeterminingFilename
+const handledDownloadIds = new Set<number>();
+
+// Cache Content-Disposition headers detected in webRequest layer
+const urlContentDispositionMap = new Map<string, { filename: string; timestamp: number }>();
+
 // Store auto interception flag (default true)
 let autoIntercept = true;
 
@@ -104,6 +110,199 @@ chrome.webNavigation?.onCommitted?.addListener((details) => {
     tabStreamsMap.set(details.tabId, []);
   }
 });
+
+// Clean up old Content-Disposition map entries every 2 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [url, entry] of urlContentDispositionMap.entries()) {
+    if (now - entry.timestamp > 60000) {
+      urlContentDispositionMap.delete(url);
+    }
+  }
+}, 120000);
+
+// =========================================================================
+// Sanitization & Filename Extraction Helpers
+// =========================================================================
+export function sanitizeFilename(filename: string): string {
+  if (!filename) return 'download.bin';
+  let clean = filename.split('?')[0].split('#')[0];
+  clean = clean.split(/[\\/]/).pop() || clean;
+  clean = clean.replace(/[\\/:*?"<>|]/g, '_').trim();
+  clean = clean.replace(/^["']|["']$/g, '');
+  return clean || 'download.bin';
+}
+
+export function isGenericFilename(name: string): boolean {
+  if (!name || !name.trim()) return true;
+  const lower = name.trim().toLowerCase();
+  const genericNames = [
+    'download',
+    'download.bin',
+    'download.octet-stream',
+    'download.mp4',
+    'download.zip',
+    'videoplayback',
+    'media_stream.mp4',
+    'video.mp4',
+    'file',
+    'file.bin',
+    'document',
+    'stream',
+    'stream.mp4',
+    'stream.bin',
+  ];
+  if (genericNames.includes(lower)) return true;
+  if (!lower.includes('.') || lower.startsWith('download.')) return true;
+  return false;
+}
+
+export function extractFilenameFromUrl(urlStr: string): string | undefined {
+  try {
+    const parsed = new URL(urlStr);
+    const lastSeg = parsed.pathname.split('/').filter(Boolean).pop();
+    if (lastSeg && lastSeg.includes('.')) {
+      const decoded = decodeURIComponent(lastSeg.split('?')[0].split('#')[0]);
+      const clean = sanitizeFilename(decoded);
+      if (!isGenericFilename(clean)) {
+        return clean;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+// Helper to extract file extension from URL or filename
+export function getFileExtension(url: string, filename?: string): string {
+  if (filename) {
+    const parts = filename.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  }
+
+  try {
+    const pathname = new URL(url).pathname;
+    const cleanPath = pathname.split('?')[0].split('#')[0];
+    const parts = cleanPath.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  } catch {
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    const parts = cleanUrl.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  }
+  return '';
+}
+
+// Extract filename from Content-Disposition header
+export function getFilenameFromContentDisposition(headers?: chrome.webRequest.HttpHeader[]): string | undefined {
+  if (!headers) return undefined;
+  const cdHeader = headers.find((h) => h.name.toLowerCase() === 'content-disposition');
+  if (!cdHeader || !cdHeader.value) return undefined;
+
+  const value = cdHeader.value;
+  const matchStar = /filename\*=UTF-8''([^;]+)/i.exec(value);
+  if (matchStar && matchStar[1]) {
+    try {
+      const decoded = decodeURIComponent(matchStar[1].trim());
+      return sanitizeFilename(decoded);
+    } catch {
+      return sanitizeFilename(matchStar[1].trim());
+    }
+  }
+
+  const matchQuoted = /filename="([^"]+)"/i.exec(value);
+  if (matchQuoted && matchQuoted[1]) {
+    return sanitizeFilename(matchQuoted[1].trim());
+  }
+
+  const matchUnquoted = /filename=([^;]+)/i.exec(value);
+  if (matchUnquoted && matchUnquoted[1]) {
+    return sanitizeFilename(matchUnquoted[1].trim().replace(/^["']|["']$/g, ''));
+  }
+
+  return undefined;
+}
+
+// Extract clean target filename from download item
+export function extractFilenameFromDownloadItem(item: chrome.downloads.DownloadItem): string {
+  if (item.filename && item.filename.trim() && !item.filename.endsWith('.crdownload')) {
+    const base = item.filename.split(/[\\/]/).pop();
+    if (base && base.trim()) {
+      const clean = sanitizeFilename(base);
+      if (!isGenericFilename(clean)) {
+        return clean;
+      }
+    }
+  }
+
+  // Check Content-Disposition cache
+  const cdEntry = urlContentDispositionMap.get(item.url);
+  if (cdEntry && cdEntry.filename && !isGenericFilename(cdEntry.filename)) {
+    return sanitizeFilename(cdEntry.filename);
+  }
+
+  // Check URL pathname
+  const fromUrl = extractFilenameFromUrl(item.url);
+  if (fromUrl) {
+    return fromUrl;
+  }
+
+  const ext = getFileExtension(item.url, item.filename);
+  return ext ? `download.${ext}` : 'download.bin';
+}
+
+// Determine if a download item matches interceptable criteria
+export function shouldInterceptDownloadItem(item: chrome.downloads.DownloadItem): boolean {
+  if (!item.url || !item.url.startsWith('http')) return false;
+
+  try {
+    const u = new URL(item.url);
+    if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  const filename = item.filename ? item.filename.split(/[\\/]/).pop() : undefined;
+  const ext = getFileExtension(item.url, filename);
+  if (ext && INTERCEPT_EXTENSIONS.has(ext)) {
+    return true;
+  }
+
+  if (item.mime) {
+    const m = item.mime.toLowerCase();
+    if (
+      m.startsWith('video/') ||
+      m.startsWith('audio/') ||
+      m.startsWith('application/x-') ||
+      m.startsWith('application/octet-stream') ||
+      m.includes('zip') ||
+      m.includes('rar') ||
+      m.includes('7z') ||
+      m.includes('tar') ||
+      m.includes('gzip') ||
+      m.includes('compressed') ||
+      m.includes('pdf') ||
+      m.includes('msword') ||
+      m.includes('officedocument') ||
+      m.includes('vnd.openxmlformats') ||
+      m.includes('executable') ||
+      m.includes('iso')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 // =========================================================================
 // Context Menu Integration: "Download with Segmenta"
@@ -278,117 +477,6 @@ function isStreamOrChunkUrl(url: string, responseHeaders?: chrome.webRequest.Htt
   return { isMatch: false, type: 'direct' };
 }
 
-// Extract filename from Content-Disposition header
-function getFilenameFromContentDisposition(headers?: chrome.webRequest.HttpHeader[]): string | undefined {
-  if (!headers) return undefined;
-  const cdHeader = headers.find((h) => h.name.toLowerCase() === 'content-disposition');
-  if (!cdHeader || !cdHeader.value) return undefined;
-
-  // e.g. attachment; filename="file.zip" or filename*=UTF-8''file.zip
-  const value = cdHeader.value;
-  const matchStar = /filename\*=UTF-8''([^;]+)/i.exec(value);
-  if (matchStar && matchStar[1]) {
-    try {
-      return decodeURIComponent(matchStar[1].trim());
-    } catch {
-      return matchStar[1].trim();
-    }
-  }
-
-  const matchQuoted = /filename="([^"]+)"/i.exec(value);
-  if (matchQuoted && matchQuoted[1]) {
-    return matchQuoted[1].trim();
-  }
-
-  const matchUnquoted = /filename=([^;]+)/i.exec(value);
-  if (matchUnquoted && matchUnquoted[1]) {
-    return matchUnquoted[1].trim().replace(/^["']|["']$/g, '');
-  }
-
-  return undefined;
-}
-
-// Helper to extract file extension from URL or filename
-function getFileExtension(url: string, filename?: string): string {
-  if (filename) {
-    const parts = filename.split('.');
-    if (parts.length > 1) {
-      return parts.pop()!.toLowerCase().trim();
-    }
-  }
-
-  try {
-    const pathname = new URL(url).pathname;
-    const cleanPath = pathname.split('?')[0].split('#')[0];
-    const parts = cleanPath.split('.');
-    if (parts.length > 1) {
-      return parts.pop()!.toLowerCase().trim();
-    }
-  } catch {
-    const cleanUrl = url.split('?')[0].split('#')[0];
-    const parts = cleanUrl.split('.');
-    if (parts.length > 1) {
-      return parts.pop()!.toLowerCase().trim();
-    }
-  }
-  return '';
-}
-
-// Determine if a URL / MIME / header matches interceptable download criteria
-function shouldInterceptDownload(url: string, mime?: string, headers?: chrome.webRequest.HttpHeader[], filename?: string): boolean {
-  if (!url || !url.startsWith('http')) return false;
-
-  // Ignore internal localhost ports to avoid looping requests
-  try {
-    const u = new URL(url);
-    if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
-      return false;
-    }
-  } catch {
-    return false;
-  }
-
-  const ext = getFileExtension(url, filename);
-  if (ext && INTERCEPT_EXTENSIONS.has(ext)) {
-    return true;
-  }
-
-  // Check Content-Disposition attachment header
-  if (headers) {
-    const cdHeader = headers.find((h) => h.name.toLowerCase() === 'content-disposition');
-    if (cdHeader && cdHeader.value && cdHeader.value.toLowerCase().includes('attachment')) {
-      return true;
-    }
-  }
-
-  // Check MIME Types
-  if (mime) {
-    const m = mime.toLowerCase();
-    if (
-      m.startsWith('video/') ||
-      m.startsWith('audio/') ||
-      m.startsWith('application/x-') ||
-      m.startsWith('application/octet-stream') ||
-      m.includes('zip') ||
-      m.includes('rar') ||
-      m.includes('7z') ||
-      m.includes('tar') ||
-      m.includes('gzip') ||
-      m.includes('compressed') ||
-      m.includes('pdf') ||
-      m.includes('msword') ||
-      m.includes('officedocument') ||
-      m.includes('vnd.openxmlformats') ||
-      m.includes('executable') ||
-      m.includes('iso')
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 // Show desktop/browser notification when Segmenta takes over a download
 function showSegmentaNotification(title: string, message: string) {
   try {
@@ -416,21 +504,22 @@ export function interceptAndDispatchUrl(
 ) {
   if (!downloadUrl || !downloadUrl.startsWith('http')) return;
 
-  // Deduplicate rapid identical dispatches (within 2 seconds)
+  // Deduplicate rapid identical dispatches (within 2.5 seconds)
   if (inFlightDispatches.has(downloadUrl)) return;
   inFlightDispatches.add(downloadUrl);
   setTimeout(() => inFlightDispatches.delete(downloadUrl), 2500);
 
-  let finalFilename = preferredFilename;
-  if (!finalFilename) {
-    try {
-      const parsedPath = new URL(downloadUrl).pathname;
-      const lastSeg = parsedPath.split('/').pop();
-      if (lastSeg && lastSeg.includes('.')) {
-        finalFilename = decodeURIComponent(lastSeg.split('?')[0].split('#')[0]);
-      }
-    } catch {
-      // ignore
+  let finalFilename = preferredFilename ? sanitizeFilename(preferredFilename) : undefined;
+  if (!finalFilename || isGenericFilename(finalFilename)) {
+    const cdEntry = urlContentDispositionMap.get(downloadUrl);
+    if (cdEntry && cdEntry.filename && !isGenericFilename(cdEntry.filename)) {
+      finalFilename = sanitizeFilename(cdEntry.filename);
+    }
+  }
+  if (!finalFilename || isGenericFilename(finalFilename)) {
+    const fromUrl = extractFilenameFromUrl(downloadUrl);
+    if (fromUrl) {
+      finalFilename = fromUrl;
     }
   }
   if (!finalFilename) {
@@ -438,9 +527,9 @@ export function interceptAndDispatchUrl(
     finalFilename = ext ? `download.${ext}` : 'download.bin';
   }
 
-  // Extract cookies for authentication and context preservation
+  // Capture complete cookies from 'chrome.cookies.getAll({ url: item.url })', Referer from item.referrer, User-Agent.
   chrome.cookies.getAll({ url: downloadUrl }, (cookies) => {
-    const cookieHeader = cookies ? cookies.map((c) => `${c.name}=${c.value}`).join('; ') : '';
+    const cookieHeader = cookies && cookies.length > 0 ? cookies.map((c) => `${c.name}=${c.value}`).join('; ') : '';
 
     const payload: NativeMessage = {
       type: 'CREATE_TASK',
@@ -465,15 +554,25 @@ export function interceptAndDispatchUrl(
       status: 'Segmented Acceleration Active',
     });
 
-    // Notify user
+    // Show desktop/browser notification confirming interception
     showSegmentaNotification(
       'Download Intercepted',
       `Segmenta has taken over: "${finalFilename}" with 8-segment acceleration.`
     );
 
-    // Dispatch to Native Messaging Host and Desktop HTTP daemon
+    // Dispatch to 'http://127.0.0.1:45678/api/tasks' (and native messaging host)
     dispatchToNativeAndDesktop(payload, callback);
   });
+}
+
+// Process intercepted download item (deduplicated across onCreated & onDeterminingFilename)
+function processInterceptedDownload(item: chrome.downloads.DownloadItem) {
+  if (handledDownloadIds.has(item.id)) return;
+  handledDownloadIds.add(item.id);
+  setTimeout(() => handledDownloadIds.delete(item.id), 15000);
+
+  const cleanFilename = extractFilenameFromDownloadItem(item);
+  interceptAndDispatchUrl(item.url, item.referrer, cleanFilename);
 }
 
 // =========================================================================
@@ -525,16 +624,11 @@ chrome.webRequest.onHeadersReceived.addListener(
     // B. Check for Content-Disposition attachment downloads on standard HTTP web requests
     if (autoIntercept && details.responseHeaders) {
       const cdFilename = getFilenameFromContentDisposition(details.responseHeaders);
-      let contentType = '';
-      const ctHeader = details.responseHeaders.find((h) => h.name.toLowerCase() === 'content-type');
-      if (ctHeader && ctHeader.value) contentType = ctHeader.value;
-
-      if (shouldInterceptDownload(details.url, contentType, details.responseHeaders, cdFilename)) {
-        // We will catch and cancel this via chrome.downloads.onCreated, but pre-record context here
-        const ext = getFileExtension(details.url, cdFilename);
-        if (ext && INTERCEPT_EXTENSIONS.has(ext)) {
-          // Keep note of resolved filename if available
-        }
+      if (cdFilename) {
+        urlContentDispositionMap.set(details.url, {
+          filename: cdFilename,
+          timestamp: Date.now(),
+        });
       }
     }
   },
@@ -543,83 +637,44 @@ chrome.webRequest.onHeadersReceived.addListener(
 );
 
 // =========================================================================
-// 2. Universal Download Interception: chrome.downloads.onCreated
+// 2. Universal Download Interception:
+//    Listen to 'chrome.downloads.onCreated(item)' AND 'chrome.downloads.onDeterminingFilename(item, suggest)'
 // =========================================================================
-chrome.downloads.onCreated.addListener(async (downloadItem) => {
-  if (!autoIntercept) return;
-  if (!downloadItem.url || !downloadItem.url.startsWith('http')) return;
 
-  const rawFilename = downloadItem.filename ? downloadItem.filename.split(/[\\/]/).pop() : undefined;
-  const ext = getFileExtension(downloadItem.url, rawFilename);
+// A. chrome.downloads.onDeterminingFilename
+if (chrome.downloads?.onDeterminingFilename) {
+  chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+    if (!autoIntercept) return;
+    if (!shouldInterceptDownloadItem(item)) return;
 
-  // Full IDM parity check: match known interceptable extensions or mime types
-  const shouldIntercept =
-    (ext && INTERCEPT_EXTENSIONS.has(ext)) ||
-    (downloadItem.mime && (
-      downloadItem.mime.startsWith('video/') ||
-      downloadItem.mime.startsWith('audio/') ||
-      downloadItem.mime.startsWith('application/x-') ||
-      downloadItem.mime.startsWith('application/octet-stream') ||
-      downloadItem.mime.includes('zip') ||
-      downloadItem.mime.includes('rar') ||
-      downloadItem.mime.includes('7z') ||
-      downloadItem.mime.includes('tar') ||
-      downloadItem.mime.includes('gzip') ||
-      downloadItem.mime.includes('compressed') ||
-      downloadItem.mime.includes('pdf') ||
-      downloadItem.mime.includes('msword') ||
-      downloadItem.mime.includes('officedocument') ||
-      downloadItem.mime.includes('vnd.openxmlformats') ||
-      downloadItem.mime.includes('executable') ||
-      downloadItem.mime.includes('iso')
-    ));
+    // In 'onDeterminingFilename', if auto-intercept is on, IMMEDIATELY call 'chrome.downloads.cancel(item.id)' and 'chrome.downloads.erase({ id: item.id })'
+    chrome.downloads.cancel(item.id, () => {
+      if (chrome.runtime.lastError) {
+        // ignore
+      }
+      chrome.downloads.erase({ id: item.id }, () => {});
+    });
 
-  if (!shouldIntercept) {
-    return;
-  }
+    processInterceptedDownload(item);
+  });
+}
 
-  // Instantly cancel and erase browser download to prevent browser Save-As dialog holding the file
-  try {
+// B. chrome.downloads.onCreated
+if (chrome.downloads?.onCreated) {
+  chrome.downloads.onCreated.addListener((downloadItem) => {
+    if (!autoIntercept) return;
+    if (!shouldInterceptDownloadItem(downloadItem)) return;
+
+    // Instantly cancel and erase browser download to prevent browser holding the file
     chrome.downloads.cancel(downloadItem.id, () => {
       if (chrome.runtime.lastError) {
-        console.warn('Could not cancel browser download:', chrome.runtime.lastError.message);
+        // ignore
       }
-      chrome.downloads.erase({ id: downloadItem.id }, () => {
-        if (chrome.runtime.lastError) {
-          // Ignore erase error if already removed
-        }
-      });
+      chrome.downloads.erase({ id: downloadItem.id }, () => {});
     });
-  } catch (e) {
-    console.warn('Error canceling browser download:', e);
-  }
 
-  // Resolve target filename
-  let finalFilename = rawFilename;
-  if (!finalFilename) {
-    try {
-      const parsedPath = new URL(downloadItem.url).pathname;
-      const lastSeg = parsedPath.split('/').pop();
-      if (lastSeg && lastSeg.includes('.')) {
-        finalFilename = decodeURIComponent(lastSeg.split('?')[0].split('#')[0]);
-      }
-    } catch {
-      // ignore url parse error
-    }
-  }
-  if (!finalFilename) {
-    finalFilename = ext ? `download.${ext}` : 'download.bin';
-  }
-
-  // Extract cookies and context, then dispatch
-  interceptAndDispatchUrl(downloadItem.url, downloadItem.referrer, finalFilename);
-});
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    processInterceptedDownload(downloadItem);
+  });
 }
 
 function saveRecentDownload(item: RecentDownloadItem) {
@@ -646,59 +701,56 @@ export interface HostStatusResponse {
 export function checkConnectionStatus(callback: (res: HostStatusResponse) => void) {
   let finished = false;
 
-  // 1. Try Native Messaging Host first
-  try {
-    chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: 'PING' }, (nativeRes: any) => {
-      if (!chrome.runtime.lastError && nativeRes && !nativeRes.error) {
-        if (!finished) {
-          finished = true;
-          callback({
-            connected: true,
-            status: nativeRes.status || 'connected',
-            version: nativeRes.version || '1.0.0',
-            source: 'native',
-          });
-          return;
-        }
+  // 1. Try Desktop HTTP endpoint first
+  fetch(DESKTOP_PING_ENDPOINT, { method: 'GET' })
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP status ${r.status}`);
+      return r.json();
+    })
+    .then((data: any) => {
+      if (!finished) {
+        finished = true;
+        callback({
+          connected: true,
+          status: data.status || 'online',
+          version: data.version || '1.0.0',
+          source: 'http',
+        });
       }
-
-      // If native messaging failed, try HTTP endpoint 127.0.0.1:45678/ping
-      checkHttpPing();
-    });
-  } catch {
-    checkHttpPing();
-  }
-
-  // 2. HTTP /ping endpoint check helper
-  function checkHttpPing() {
-    fetch(DESKTOP_PING_ENDPOINT, { method: 'GET' })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP status ${r.status}`);
-        return r.json();
-      })
-      .then((data: any) => {
-        if (!finished) {
-          finished = true;
-          callback({
-            connected: true,
-            status: data.status || 'online',
-            version: data.version || '1.0.0',
-            source: 'http',
-          });
-        }
-      })
-      .catch((err) => {
+    })
+    .catch(() => {
+      // 2. Fallback to Native Messaging Host check
+      try {
+        chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: 'PING' }, (nativeRes: any) => {
+          if (!finished) {
+            finished = true;
+            if (!chrome.runtime.lastError && nativeRes && !nativeRes.error) {
+              callback({
+                connected: true,
+                status: nativeRes.status || 'connected',
+                version: nativeRes.version || '1.0.0',
+                source: 'native',
+              });
+            } else {
+              callback({
+                connected: false,
+                error: 'Segmenta Desktop is Offline',
+              });
+            }
+          }
+        });
+      } catch {
         if (!finished) {
           finished = true;
           callback({
             connected: false,
-            error: 'Desktop Offline',
+            error: 'Segmenta Desktop is Offline',
           });
         }
-      });
-  }
+      }
+    });
 
-  // Safety timeout in case both hang
+  // Safety timeout
   setTimeout(() => {
     if (!finished) {
       finished = true;
@@ -828,62 +880,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Dispatch payload to Native Messaging Host with HTTP 127.0.0.1:45678 fallback
+// Dispatch payload to Desktop HTTP endpoint with Native Messaging Host fallback
 export function dispatchToNativeAndDesktop(
   payload: NativeMessage,
   callback?: (response: unknown) => void
 ) {
-  let responded = false;
-
-  // Try Native Messaging Host first
-  try {
-    chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
-      if (chrome.runtime.lastError) {
-        console.warn('Native host not reachable:', chrome.runtime.lastError.message);
-        // Fallback to local HTTP server if desktop app has active HTTP listener
-        sendToDesktopHttp(payload, (httpRes) => {
-          if (!responded && callback) {
-            responded = true;
-            callback(httpRes);
-          }
-        });
-      } else {
-        console.log('Task dispatched via Native Messaging Host:', response);
-        if (!responded && callback) {
-          responded = true;
-          callback(response);
-        }
-      }
-    });
-  } catch (err) {
-    console.error('Failed to dispatch native message:', err);
-    sendToDesktopHttp(payload, (httpRes) => {
-      if (!responded && callback) {
-        responded = true;
-        callback(httpRes);
-      }
-    });
-  }
-}
-
-function sendToDesktopHttp(payload: NativeMessage, callback: (response: unknown) => void) {
-  if (payload.type !== 'CREATE_TASK' || !payload.payload) {
-    callback({ error: 'Native host not reachable and not a task creation payload' });
-    return;
-  }
-
-  fetch(DESKTOP_HTTP_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload.payload),
-  })
-    .then((r) => r.json())
-    .then((data) => {
-      console.log('Task dispatched to Desktop via HTTP:', data);
-      callback(data);
+  if (payload.type === 'CREATE_TASK' && payload.payload) {
+    // Send to Desktop HTTP endpoint first
+    fetch(DESKTOP_HTTP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload.payload),
     })
-    .catch((err) => {
-      console.warn('Desktop HTTP endpoint not reachable:', err);
-      callback({ error: 'Segmenta Desktop is not running or unreachable' });
-    });
+      .then((r) => r.json())
+      .then((data) => {
+        console.log('Task dispatched to Desktop via HTTP:', data);
+        if (callback) callback(data);
+      })
+      .catch((httpErr) => {
+        console.warn('Desktop HTTP endpoint not reachable, trying Native Messaging Host:', httpErr);
+        // Fallback to Native Messaging Host
+        try {
+          chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn('Native host error:', chrome.runtime.lastError.message);
+              if (callback) callback({ error: 'Segmenta Desktop is not running or unreachable' });
+            } else {
+              if (callback) callback(response);
+            }
+          });
+        } catch {
+          if (callback) callback({ error: 'Segmenta Desktop is not running or unreachable' });
+        }
+      });
+  } else {
+    // For non-task messages (e.g. PING, OPEN_FOLDER, MEDIA_STREAM_DETECTED)
+    try {
+      chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
+        if (chrome.runtime.lastError) {
+          if (callback) callback({ error: chrome.runtime.lastError.message });
+        } else {
+          if (callback) callback(response);
+        }
+      });
+    } catch {
+      if (callback) callback({ error: 'Native host not reachable' });
+    }
+  }
 }
