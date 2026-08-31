@@ -296,6 +296,9 @@
       if (t) t.status = 'Downloading';
       return undefined as unknown as T;
     }
+    if (cmd === 'open_file' || cmd === 'open_file_folder') {
+      return undefined as unknown as T;
+    }
     if (cmd === 'cancel_task' || cmd === 'delete_task') {
       mockTasksStore = mockTasksStore.filter((x) => x.id !== args.taskId && x.id !== args.task_id);
       scheduledTasks = scheduledTasks.filter((x) => x.task.id !== args.taskId && x.task.id !== args.task_id);
@@ -677,15 +680,25 @@
     await refreshTasks();
   }
 
-  async function handleDelete(taskId: string) {
-    // Optimistic UI update
+  async function handleDelete(taskId: string, deleteFiles = false) {
+    // Optimistic UI update immediately so the UI updates with zero delay
     tasks = tasks.filter((x) => x.id !== taskId);
     const next = new Set(selectedTaskIds);
     next.delete(taskId);
     selectedTaskIds = next;
     if (focusedTaskId === taskId) focusedTaskId = null;
-    await invokeCommand('cancel_task', { taskId, task_id: taskId, cleanupPartial: false });
+    delete taskSpeedMap[taskId];
+    await invokeCommand('delete_task', { taskId, task_id: taskId, deleteFiles, delete_files: deleteFiles });
     await refreshTasks();
+  }
+
+  async function handleOpenFile(path: string) {
+    if (!path) return;
+    try {
+      await invokeCommand('open_file', { path });
+    } catch (e) {
+      console.warn('Failed to open file:', e);
+    }
   }
 
   async function handlePauseAll() {
@@ -709,11 +722,15 @@
   }
 
   async function handleClearCompleted() {
+    const completedTasks = tasks.filter((x) => x.status === 'Completed');
     tasks = tasks.filter((x) => x.status !== 'Completed');
-    for (const t of tasks.filter((x) => x.status === 'Completed')) {
-      await invokeCommand('delete_task', { taskId: t.id, task_id: t.id, deleteFiles: false });
+    for (const t of completedTasks) {
+      const next = new Set(selectedTaskIds);
+      next.delete(t.id);
+      selectedTaskIds = next;
+      if (focusedTaskId === t.id) focusedTaskId = null;
+      await invokeCommand('delete_task', { taskId: t.id, task_id: t.id, deleteFiles: false, delete_files: false });
     }
-    selectedTaskIds = new Set();
     await refreshTasks();
   }
 
@@ -737,12 +754,15 @@
     await refreshTasks();
   }
 
-  async function handleDeleteSelected() {
+  async function handleDeleteSelected(deleteFiles = false) {
+    const idsToDelete = Array.from(selectedTaskIds);
     tasks = tasks.filter((t) => !selectedTaskIds.has(t.id));
-    for (const id of selectedTaskIds) {
-      await invokeCommand('cancel_task', { taskId: id, task_id: id, cleanupPartial: false });
-    }
     selectedTaskIds = new Set();
+    focusedTaskId = null;
+    for (const id of idsToDelete) {
+      delete taskSpeedMap[id];
+      await invokeCommand('delete_task', { taskId: id, task_id: id, deleteFiles, delete_files: deleteFiles });
+    }
     await refreshTasks();
   }
 
@@ -1339,8 +1359,8 @@
             </button>
             <button
               type="button"
-              onclick={handleDeleteSelected}
-              class="px-2.5 py-1 bg-surface dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium rounded-lg flex items-center gap-1 shadow-sm"
+              onclick={() => handleDeleteSelected(false)}
+              class="px-2.5 py-1 bg-surface dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium rounded-lg flex items-center gap-1 shadow-sm cursor-pointer"
             >
               <Trash2 class="w-3 h-3" /> {t('actions.delete_selected', currentLang)}
             </button>
@@ -1563,7 +1583,24 @@
                   <!-- Row Actions -->
                   <td class="px-3 py-2 text-center whitespace-nowrap" onclick={(e) => e.stopPropagation()}>
                     <div class="flex items-center justify-center gap-1">
-                      {#if task.status === 'Downloading'}
+                      {#if task.status === 'Completed'}
+                        <button
+                          type="button"
+                          onclick={() => handleOpenFile(task.save_path)}
+                          class="p-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 transition-colors"
+                          title={t('actions.open_file', currentLang)}
+                        >
+                          <ExternalLink class="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onclick={() => openContainingFolder(task.save_path)}
+                          class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-subtle dark:text-zinc-400 hover:text-indigo-400 transition-colors"
+                          title={t('ctx.open_folder', currentLang)}
+                        >
+                          <FolderOpen class="w-3.5 h-3.5" />
+                        </button>
+                      {:else if task.status === 'Downloading'}
                         <button
                           type="button"
                           onclick={() => handlePause(task.id)}
@@ -1589,12 +1626,12 @@
                         class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-subtle dark:text-zinc-400 hover:text-primary transition-colors"
                         title={t('ctx.popout', currentLang)}
                       >
-                        <ExternalLink class="w-3.5 h-3.5" />
+                        <SlidersHorizontal class="w-3.5 h-3.5" />
                       </button>
 
                       <button
                         type="button"
-                        onclick={() => handleDelete(task.id)}
+                        onclick={() => handleDelete(task.id, false)}
                         class="p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-950/50 text-subtle dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                         title={t('ctx.delete', currentLang)}
                       >
@@ -1618,7 +1655,16 @@
             class="fixed z-50 w-52 bg-surface dark:bg-surface-darkcard rounded-xl border border-border-light dark:border-border-dark shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-100 text-xs"
             style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
           >
-            {#if ctxTask.status === 'Downloading'}
+            {#if ctxTask.status === 'Completed'}
+              <button
+                type="button"
+                onclick={() => { handleOpenFile(ctxTask.save_path); closeContextMenu(); }}
+                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-emerald-600 dark:text-emerald-400 font-semibold text-left"
+              >
+                <ExternalLink class="w-3.5 h-3.5" />
+                <span>{t('ctx.open_file', currentLang)}</span>
+              </button>
+            {:else if ctxTask.status === 'Downloading'}
               <button
                 type="button"
                 onclick={() => { handlePause(ctxTask.id); closeContextMenu(); }}
@@ -1643,7 +1689,7 @@
               onclick={() => { openProgressPopout(ctxTask.id); closeContextMenu(); }}
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium text-left"
             >
-              <ExternalLink class="w-3.5 h-3.5 text-secondary" />
+              <SlidersHorizontal class="w-3.5 h-3.5 text-secondary" />
               <span>{t('ctx.popout', currentLang)}</span>
             </button>
 
@@ -1669,11 +1715,20 @@
 
             <button
               type="button"
-              onclick={() => { handleDelete(ctxTask.id); closeContextMenu(); }}
+              onclick={() => { handleDelete(ctxTask.id, false); closeContextMenu(); }}
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium text-left"
             >
               <Trash2 class="w-3.5 h-3.5" />
               <span>{t('ctx.delete', currentLang)}</span>
+            </button>
+
+            <button
+              type="button"
+              onclick={() => { handleDelete(ctxTask.id, true); closeContextMenu(); }}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium text-left"
+            >
+              <Trash2 class="w-3.5 h-3.5 text-rose-700" />
+              <span>{t('ctx.delete_file', currentLang)}</span>
             </button>
           </div>
         {/if}
