@@ -185,6 +185,11 @@ async fn delete_task(
 }
 
 #[tauri::command]
+fn close_current_window(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_speed_limit(limit_bytes: Option<u64>, state: State<AppState>) -> Result<(), String> {
     let engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.set_speed_limit(limit_bytes);
@@ -528,6 +533,7 @@ async fn main() {
             get_autostart,
             open_file_folder,
             open_file,
+            close_current_window,
             exit_app
         ])
         .run(tauri::generate_context!())

@@ -21,8 +21,7 @@
     Clock,
     Activity,
     Folder,
-    ExternalLink,
-    Sparkles
+    ExternalLink
   } from 'lucide-svelte';
   import { t, getLanguage, type LanguageCode } from '$lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
@@ -161,14 +160,18 @@
 
   async function handleClose() {
     try {
-      if (typeof window !== 'undefined' && ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) {
-        const win = getCurrentWebviewWindow();
-        await win.close();
-      } else {
+      await invokeCmd('close_current_window');
+    } catch {
+      try {
+        if (typeof window !== 'undefined' && ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) {
+          const win = getCurrentWebviewWindow();
+          await win.close();
+        } else {
+          window.close();
+        }
+      } catch {
         window.close();
       }
-    } catch {
-      window.close();
     }
   }
 
@@ -334,9 +337,6 @@
       <div class="relative">
         <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 border-2 border-emerald-500/30 flex items-center justify-center text-emerald-500 shadow-lg shadow-emerald-500/10">
           <CheckCircle2 class="w-8 h-8 stroke-[2.5]" />
-        </div>
-        <div class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
-          <Sparkles class="w-3 h-3" />
         </div>
       </div>
 
