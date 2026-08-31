@@ -32,17 +32,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   const streamCount = document.getElementById('stream-count');
   const recentContainer = document.getElementById('recent-container');
 
-  // 1. Check connection status with background / native host
+  // 1. Check connection status with background / native host / HTTP fallback
   chrome.runtime.sendMessage({ type: 'CHECK_STATUS' }, (response: HostStatusResponse) => {
     if (chrome.runtime.lastError || !response || response.error || response.connected === false) {
-      if (statusBadge && statusText) {
-        statusBadge.className = 'status-pill offline';
-        statusText.innerText = 'Desktop Offline';
-      }
+      // Direct secondary check to HTTP /ping from popup just in case
+      fetch('http://127.0.0.1:45678/ping')
+        .then((r) => r.json())
+        .then((data: any) => {
+          if (statusBadge && statusText) {
+            statusBadge.className = 'status-pill online';
+            statusText.innerText = data.version ? `Connected (v${data.version})` : 'Connected / Online';
+          }
+        })
+        .catch(() => {
+          if (statusBadge && statusText) {
+            statusBadge.className = 'status-pill offline';
+            statusText.innerText = 'Desktop Offline';
+          }
+        });
     } else {
       if (statusBadge && statusText) {
         statusBadge.className = 'status-pill online';
-        statusText.innerText = response.version ? `Desktop v${response.version}` : 'Connected';
+        statusText.innerText = response.version ? `Connected (v${response.version})` : 'Connected / Online';
       }
     }
   });

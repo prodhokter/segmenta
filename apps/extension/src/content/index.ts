@@ -133,13 +133,25 @@ function getCleanMediaTitle(): string {
     .substring(0, 120);
 }
 
-// Keep track of active overlay per player container
-let activeOverlayMap = new WeakMap<HTMLVideoElement, HTMLElement>();
+// Keep track of active overlay per video element to avoid any duplicate overlays
+const activeOverlayMap = new WeakMap<HTMLVideoElement, HTMLElement>();
 
 function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   // Ignore already dismissed or tiny preview videos (e.g. YouTube thumbnails or background audio elements)
-  if (videoEl.dataset.segmentaDismissed === 'true') return;
-  if (activeOverlayMap.has(videoEl)) return;
+  if (videoEl.dataset.segmentaDismissed === 'true') {
+    const existing = activeOverlayMap.get(videoEl);
+    if (existing) {
+      existing.remove();
+      activeOverlayMap.delete(videoEl);
+    }
+    return;
+  }
+
+  // If overlay is already active and attached, simply update its position
+  const existingOverlay = activeOverlayMap.get(videoEl);
+  if (existingOverlay && document.body.contains(existingOverlay)) {
+    return;
+  }
 
   const rect = videoEl.getBoundingClientRect();
   // Filter out tiny thumbnail previews or hidden zero-sized video elements
@@ -152,21 +164,21 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   container.style.display = 'flex';
   container.style.alignItems = 'center';
   container.style.gap = '6px';
-  container.style.background = 'rgba(15, 23, 42, 0.92)';
-  container.style.backdropFilter = 'blur(12px)';
+  container.style.background = 'rgba(15, 23, 42, 0.95)';
+  container.style.backdropFilter = 'blur(16px)';
   container.style.border = '1px solid rgba(99, 102, 241, 0.45)';
   container.style.borderRadius = '8px';
   container.style.padding = '4px 6px';
-  container.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(79, 70, 229, 0.2)';
-  container.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  container.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(79, 70, 229, 0.25)';
+  container.style.fontFamily = 'Plus Jakarta Sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   container.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
   container.style.userSelect = 'none';
-  container.style.opacity = '0.9';
+  container.style.opacity = '0.92';
 
   container.onmouseenter = () => { container.style.opacity = '1'; };
-  container.onmouseleave = () => { container.style.opacity = '0.9'; };
+  container.onmouseleave = () => { container.style.opacity = '0.92'; };
 
-  // Primary Action Button: "⚡ Download Video"
+  // Primary Action Button: "Download Video"
   const btn = document.createElement('button');
   btn.className = 'segmenta-btn-download';
   btn.innerHTML = `
@@ -198,7 +210,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   // Resolution / Quality dropdown
   const qualitySelect = document.createElement('select');
   qualitySelect.className = 'segmenta-quality-select';
-  qualitySelect.style.background = 'rgba(30, 41, 59, 0.9)';
+  qualitySelect.style.background = 'rgba(30, 41, 59, 0.95)';
   qualitySelect.style.color = '#e2e8f0';
   qualitySelect.style.border = '1px solid rgba(255, 255, 255, 0.15)';
   qualitySelect.style.borderRadius = '5px';
@@ -245,7 +257,7 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   closeBtn.style.transition = 'background 0.15s ease';
 
   closeBtn.onmouseenter = () => {
-    closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+    closeBtn.style.background = 'rgba(255, 255, 255, 0.15)';
   };
   closeBtn.onmouseleave = () => {
     closeBtn.style.background = 'transparent';
