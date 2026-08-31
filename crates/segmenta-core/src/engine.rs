@@ -1,3 +1,5 @@
+use crate::media::download_hls;
+use crate::scheduler::DownloadScheduler;
 use crate::segment::{calculate_segments, download_segment, reassemble_segments};
 use crate::storage::Storage;
 use crate::throttler::TokenBucket;
@@ -16,6 +18,7 @@ pub struct DownloadEngine {
     storage: Storage,
     client: Client,
     throttler: Arc<TokenBucket>,
+    scheduler: Arc<DownloadScheduler>,
     temp_dir: String,
     active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
 }
@@ -29,9 +32,14 @@ impl DownloadEngine {
                 .build()
                 .unwrap_or_default(),
             throttler: Arc::new(TokenBucket::new(None)),
+            scheduler: Arc::new(DownloadScheduler::new(3)),
             temp_dir,
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    pub fn scheduler(&self) -> Arc<DownloadScheduler> {
+        self.scheduler.clone()
     }
 
     pub fn set_speed_limit(&self, speed_limit_bytes: Option<u64>) {
@@ -65,51 +73,55 @@ impl DownloadEngine {
         let temp_task_dir = format!("{}/task_{}", self.temp_dir, task_id);
         let _ = tokio::fs::create_dir_all(&temp_task_dir).await;
 
+        let is_m3u8 = url.split('?').next().unwrap_or(&url).ends_with(".m3u8");
+
         // Dispatch probe request (HEAD, fallback to GET Range bytes=0-0 if HEAD fails or doesn't return length)
         let mut total_size = None;
         let mut etag = None;
         let mut last_modified = None;
         let mut accept_ranges = false;
 
-        let mut head_req = self.client.head(&url);
-        for (k, v) in &headers {
-            if let (Ok(h_name), Ok(h_val)) = (
-                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
-                reqwest::header::HeaderValue::from_str(v),
-            ) {
-                head_req = head_req.header(h_name, h_val);
+        if !is_m3u8 {
+            let mut head_req = self.client.head(&url);
+            for (k, v) in &headers {
+                if let (Ok(h_name), Ok(h_val)) = (
+                    reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                    reqwest::header::HeaderValue::from_str(v),
+                ) {
+                    head_req = head_req.header(h_name, h_val);
+                }
             }
-        }
 
-        let head_res = head_req.send().await;
-        if let Ok(res) = head_res {
-            if res.status().is_success() {
-                let res_headers = res.headers();
-                if let Some(cl) = res_headers
-                    .get(CONTENT_LENGTH)
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.parse::<u64>().ok())
-                {
-                    total_size = Some(cl);
-                }
-                if let Some(ar) = res_headers.get(ACCEPT_RANGES).and_then(|v| v.to_str().ok()) {
-                    if ar.to_lowercase().contains("bytes") {
-                        accept_ranges = true;
-                    }
-                }
-                if let Some(et) = res_headers.get(ETAG).and_then(|v| v.to_str().ok()) {
-                    etag = Some(et.to_string());
-                }
-                if let Some(lm) = res_headers.get(LAST_MODIFIED).and_then(|v| v.to_str().ok()) {
-                    last_modified = Some(lm.to_string());
-                }
-                if filename.is_empty() {
-                    if let Some(cd) = res_headers
-                        .get(CONTENT_DISPOSITION)
+            let head_res = head_req.send().await;
+            if let Ok(res) = head_res {
+                if res.status().is_success() {
+                    let res_headers = res.headers();
+                    if let Some(cl) = res_headers
+                        .get(CONTENT_LENGTH)
                         .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.parse::<u64>().ok())
                     {
-                        if let Some(extracted) = parse_filename_from_cd(cd) {
-                            filename = extracted;
+                        total_size = Some(cl);
+                    }
+                    if let Some(ar) = res_headers.get(ACCEPT_RANGES).and_then(|v| v.to_str().ok()) {
+                        if ar.to_lowercase().contains("bytes") {
+                            accept_ranges = true;
+                        }
+                    }
+                    if let Some(et) = res_headers.get(ETAG).and_then(|v| v.to_str().ok()) {
+                        etag = Some(et.to_string());
+                    }
+                    if let Some(lm) = res_headers.get(LAST_MODIFIED).and_then(|v| v.to_str().ok()) {
+                        last_modified = Some(lm.to_string());
+                    }
+                    if filename.is_empty() {
+                        if let Some(cd) = res_headers
+                            .get(CONTENT_DISPOSITION)
+                            .and_then(|v| v.to_str().ok())
+                        {
+                            if let Some(extracted) = parse_filename_from_cd(cd) {
+                                filename = extracted;
+                            }
                         }
                     }
                 }
@@ -117,19 +129,25 @@ impl DownloadEngine {
         }
 
         if filename.is_empty() {
-            filename = url
+            let path_part = url
                 .split('?')
                 .next()
                 .unwrap_or("")
                 .split('/')
                 .next_back()
                 .filter(|s| !s.is_empty())
-                .unwrap_or("download.bin")
-                .to_string();
+                .unwrap_or("download.bin");
+
+            filename = if is_m3u8 && path_part.ends_with(".m3u8") {
+                format!("{}.ts", path_part.trim_end_matches(".m3u8"))
+            } else {
+                path_part.to_string()
+            };
         }
 
-        // Clamp segments: if server doesn't support ranges or file size unknown, fallback to 1 segment
-        let effective_segments_count = if accept_ranges || total_size.is_some() {
+        let effective_segments_count = if is_m3u8 {
+            1
+        } else if accept_ranges || total_size.is_some() {
             segments_count.clamp(1, 32)
         } else {
             1
@@ -162,12 +180,16 @@ impl DownloadEngine {
             .save_task(&task)
             .map_err(|e| format!("Database error: {}", e))?;
 
-        if let Some(size) = total_size {
-            let segments = calculate_segments(&task_id, size, task.segments_count, &temp_task_dir);
-            for seg in segments {
-                let _ = self.storage.save_segment(&seg);
+        if !is_m3u8 {
+            if let Some(size) = total_size {
+                let segments = calculate_segments(&task_id, size, task.segments_count, &temp_task_dir);
+                for seg in segments {
+                    let _ = self.storage.save_segment(&seg);
+                }
             }
         }
+
+        self.scheduler.enqueue_task(task_id.clone()).await;
 
         Ok(task_id)
     }
@@ -177,6 +199,9 @@ impl DownloadEngine {
         if let Some(token) = active.remove(task_id) {
             token.cancel();
         }
+
+        self.scheduler.mark_completed_or_inactive(task_id).await;
+        let _ = self.scheduler.remove_from_queue(task_id).await;
 
         self.storage
             .update_task_status(task_id, TaskStatus::Paused, None)
@@ -190,6 +215,9 @@ impl DownloadEngine {
         if let Some(token) = active.remove(task_id) {
             token.cancel();
         }
+
+        self.scheduler.mark_completed_or_inactive(task_id).await;
+        let _ = self.scheduler.remove_from_queue(task_id).await;
 
         self.storage
             .update_task_status(task_id, TaskStatus::Cancelled, None)
@@ -211,6 +239,7 @@ impl DownloadEngine {
             let mut active = self.active_tasks.lock().await;
             active.insert(task_id.to_string(), cancel_token.clone());
         }
+        self.scheduler.mark_active(task_id.to_string()).await;
 
         task.status = TaskStatus::Downloading;
         task.updated_at = Utc::now();
@@ -220,6 +249,69 @@ impl DownloadEngine {
 
         if let Some(ref sender) = progress_sender {
             let _ = sender.send(task.clone());
+        }
+
+        let is_m3u8 = task.url.split('?').next().unwrap_or(&task.url).ends_with(".m3u8");
+
+        if is_m3u8 {
+            let (tx, mut rx) = mpsc::channel::<(u32, u32)>(100);
+            let progress_sender_clone = progress_sender.clone();
+            let task_clone = task.clone();
+            let progress_hdl = tokio::spawn(async move {
+                while let Some((curr, total)) = rx.recv().await {
+                    if let Some(ref sender) = progress_sender_clone {
+                        let mut t = task_clone.clone();
+                        t.downloaded_size = curr as u64;
+                        t.total_size = Some(total as u64);
+                        let _ = sender.send(t);
+                    }
+                }
+            });
+
+            let res = download_hls(
+                &self.client,
+                &task.url,
+                &task.headers,
+                &task.save_path,
+                self.throttler.clone(),
+                Some(cancel_token.clone()),
+                Some(tx),
+            )
+            .await;
+
+            let _ = progress_hdl.await;
+
+            {
+                let mut active = self.active_tasks.lock().await;
+                active.remove(task_id);
+            }
+            self.scheduler.mark_completed_or_inactive(task_id).await;
+
+            match res {
+                Ok(total_bytes) => {
+                    let mut completed_task = task.clone();
+                    completed_task.status = TaskStatus::Completed;
+                    completed_task.downloaded_size = total_bytes;
+                    completed_task.total_size = Some(total_bytes);
+                    completed_task.finished_at = Some(Utc::now());
+                    completed_task.updated_at = Utc::now();
+                    let _ = self.storage.save_task(&completed_task);
+
+                    if let Some(sender) = progress_sender {
+                        let _ = sender.send(completed_task);
+                    }
+                    return Ok(());
+                }
+                Err(err) => {
+                    if err == "Cancelled" {
+                        return Ok(());
+                    }
+                    self.storage
+                        .update_task_status(task_id, TaskStatus::Failed, Some(err.clone()))
+                        .map_err(|e| e.to_string())?;
+                    return Err(err);
+                }
+            }
         }
 
         let mut segments = self
@@ -309,6 +401,7 @@ impl DownloadEngine {
             let mut active = self.active_tasks.lock().await;
             active.remove(task_id);
         }
+        self.scheduler.mark_completed_or_inactive(task_id).await;
 
         if let Some(err) = download_error {
             self.storage
