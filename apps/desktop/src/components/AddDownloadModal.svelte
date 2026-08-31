@@ -17,6 +17,7 @@
   let filename = $state('');
   let savePath = $state('');
   let segments = $state(8);
+  let wasOpen = false;
 
   // HLS stream detection state
   let isHlsDetected = $state(false);
@@ -25,9 +26,12 @@
   let selectedVariantUrl = $state('');
 
   $effect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpen) {
+      wasOpen = true;
       if (!savePath) savePath = defaultDownloadDir || 'C:\\Downloads';
       segments = defaultSegments || 8;
+    } else if (!isOpen) {
+      wasOpen = false;
     }
   });
 

@@ -2,21 +2,32 @@ import { resolve } from 'path';
 import { defineConfig, Plugin } from 'vite';
 import fs from 'fs';
 
-function copyManifestPlugin(): Plugin {
+function copyManifestAndIconsPlugin(): Plugin {
   return {
-    name: 'copy-manifest',
+    name: 'copy-manifest-and-icons',
     closeBundle() {
       const manifestSrc = resolve(__dirname, 'manifest.json');
       const manifestDest = resolve(__dirname, 'dist/manifest.json');
       if (fs.existsSync(manifestSrc)) {
         fs.copyFileSync(manifestSrc, manifestDest);
       }
+
+      const iconsSrcDir = resolve(__dirname, 'icons');
+      const iconsDestDir = resolve(__dirname, 'dist/icons');
+      if (fs.existsSync(iconsSrcDir)) {
+        if (!fs.existsSync(iconsDestDir)) {
+          fs.mkdirSync(iconsDestDir, { recursive: true });
+        }
+        for (const file of fs.readdirSync(iconsSrcDir)) {
+          fs.copyFileSync(resolve(iconsSrcDir, file), resolve(iconsDestDir, file));
+        }
+      }
     },
   };
 }
 
 export default defineConfig({
-  plugins: [copyManifestPlugin()],
+  plugins: [copyManifestAndIconsPlugin()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

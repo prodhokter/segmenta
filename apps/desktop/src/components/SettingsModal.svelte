@@ -17,15 +17,19 @@
   let speedLimitKb = $state(0);
   let theme = $state('system');
   let autoCategorize = $state(true);
+  let wasOpen = false;
 
   $effect(() => {
-    if (isOpen && settings) {
+    if (isOpen && !wasOpen && settings) {
+      wasOpen = true;
       downloadDir = settings.download_dir || 'C:\\Downloads';
       maxConcurrent = settings.max_concurrent_downloads || 3;
       defaultSegments = settings.default_segments || 8;
       speedLimitKb = settings.speed_limit_kb || 0;
       theme = settings.theme || 'system';
       autoCategorize = settings.auto_categorize ?? true;
+    } else if (!isOpen) {
+      wasOpen = false;
     }
   });
 

@@ -1,9 +1,10 @@
 const NATIVE_HOST = 'com.segmenta.downloader';
+const DESKTOP_HTTP_ENDPOINT = 'http://127.0.0.1:45678/api/tasks';
 
 export interface StreamItem {
   id: string;
   url: string;
-  type: 'hls' | 'dash' | 'direct' | 'chunk';
+  type: 'hls' | 'dash' | 'direct' | 'chunk' | 'youtube';
   mimeType?: string;
   title: string;
   tabId?: number;
@@ -21,7 +22,7 @@ export interface TaskPayload {
   filename?: string;
   headers: Record<string, string>;
   segments: number;
-  media_type?: 'hls' | 'dash' | 'direct';
+  media_type?: 'hls' | 'dash' | 'direct' | 'blob' | 'youtube';
 }
 
 export interface NativeMessage {
@@ -89,7 +90,7 @@ function recordDetectedStream(tabId: number, stream: StreamItem) {
 
     // Notify native host about stream detection if master/playlist
     if (stream.type === 'hls' || stream.type === 'dash' || stream.type === 'direct') {
-      dispatchToNativeHost({
+      dispatchToNativeAndDesktop({
         type: 'MEDIA_STREAM_DETECTED',
         stream,
       });
@@ -208,7 +209,7 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
       timestamp: Date.now(),
     });
 
-    dispatchToNativeHost(payload);
+    dispatchToNativeAndDesktop(payload);
   });
 });
 
@@ -246,7 +247,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
 
-    chrome.cookies.getAll({ url: mediaUrl.startsWith('http') ? mediaUrl : pageUrl }, (cookies) => {
+    const cookieLookupUrl = mediaUrl.startsWith('http') ? mediaUrl : (pageUrl.startsWith('http') ? pageUrl : 'http://localhost');
+    chrome.cookies.getAll({ url: cookieLookupUrl }, (cookies) => {
       const cookieHeader = cookies ? cookies.map((c) => `${c.name}=${c.value}`).join('; ') : '';
 
       const payload: NativeMessage = {
@@ -270,7 +272,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         timestamp: Date.now(),
       });
 
-      dispatchToNativeHost(payload, (res) => {
+      dispatchToNativeAndDesktop(payload, (res) => {
         sendResponse(res);
       });
     });
@@ -305,29 +307,68 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const payload: NativeMessage = {
       type: 'PING',
     };
-    dispatchToNativeHost(payload, (res) => {
+    dispatchToNativeAndDesktop(payload, (res) => {
       sendResponse(res);
     });
     return true;
   }
 });
 
-export function dispatchToNativeHost(
+export function dispatchToNativeAndDesktop(
   payload: NativeMessage,
   callback?: (response: unknown) => void
 ) {
+  let responded = false;
+
+  // Try Native Messaging Host first
   try {
     chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
       if (chrome.runtime.lastError) {
         console.warn('Native host not reachable:', chrome.runtime.lastError.message);
-        if (callback) callback({ error: chrome.runtime.lastError.message, connected: false });
+        // Fallback to local HTTP server if desktop app has active HTTP listener
+        sendToDesktopHttp(payload, (httpRes) => {
+          if (!responded && callback) {
+            responded = true;
+            callback(httpRes);
+          }
+        });
       } else {
-        console.log('Task dispatched to Segmenta:', response);
-        if (callback) callback(response);
+        console.log('Task dispatched via Native Messaging Host:', response);
+        if (!responded && callback) {
+          responded = true;
+          callback(response);
+        }
       }
     });
   } catch (err) {
     console.error('Failed to dispatch native message:', err);
-    if (callback) callback({ error: String(err), connected: false });
+    sendToDesktopHttp(payload, (httpRes) => {
+      if (!responded && callback) {
+        responded = true;
+        callback(httpRes);
+      }
+    });
   }
+}
+
+function sendToDesktopHttp(payload: NativeMessage, callback: (response: unknown) => void) {
+  if (payload.type !== 'CREATE_TASK' || !payload.payload) {
+    callback({ error: 'Native host not reachable and not a task creation payload' });
+    return;
+  }
+
+  fetch(DESKTOP_HTTP_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload.payload),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      console.log('Task dispatched to Desktop via HTTP:', data);
+      callback(data);
+    })
+    .catch((err) => {
+      console.warn('Desktop HTTP endpoint not reachable:', err);
+      callback({ error: 'Segmenta Desktop is not running or unreachable' });
+    });
 }

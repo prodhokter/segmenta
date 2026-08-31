@@ -98,7 +98,9 @@ async fn add_task(
     let engine_worker = engine.clone();
     let tid = task_id.clone();
     tokio::spawn(async move {
-        let _ = engine_worker.start_download(&tid, None).await;
+        if let Err(e) = engine_worker.start_download(&tid, None).await {
+            eprintln!("[Worker Error] Task {} failed: {}", tid, e);
+        }
     });
 
     Ok(task_id)
@@ -119,8 +121,11 @@ async fn resume_task(task_id: String, state: State<'_, AppState>) -> Result<(), 
         let guard = state.engine.lock().map_err(|e| e.to_string())?;
         guard.clone()
     };
+    let tid = task_id.clone();
     tokio::spawn(async move {
-        let _ = engine.start_download(&task_id, None).await;
+        if let Err(e) = engine.start_download(&tid, None).await {
+            eprintln!("[Worker Error] Resume Task {} failed: {}", tid, e);
+        }
     });
     Ok(())
 }
@@ -297,6 +302,23 @@ fn main() {
     let db_path = temp_dir.join("segmenta.db");
     let storage = Storage::new(&db_path).expect("Failed to initialize database");
     let engine = DownloadEngine::new(storage, temp_dir.to_str().unwrap().to_string());
+
+    // Background scheduler loop to poll scheduled and queued tasks
+    let engine_sched = engine.clone();
+    tokio::spawn(async move {
+        let scheduler = engine_sched.scheduler();
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            if let Some(next_id) = scheduler.poll_next_task(chrono::Utc::now()).await {
+                let worker = engine_sched.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = worker.start_download(&next_id, None).await {
+                        eprintln!("[Scheduler Error] Task {} failed: {}", next_id, e);
+                    }
+                });
+            }
+        }
+    });
 
     tauri::Builder::default()
         .manage(AppState {
