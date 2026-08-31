@@ -42,6 +42,9 @@ export interface AppSettings {
   speed_limit_kb: number;
   theme: string;
   auto_categorize: boolean;
+  autostart?: boolean;
+  start_minimized?: boolean;
+  minimize_to_tray_on_close?: boolean;
   language?: string;
 }
 
