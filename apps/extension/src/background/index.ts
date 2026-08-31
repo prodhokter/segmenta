@@ -483,7 +483,7 @@ function showSegmentaNotification(title: string, message: string) {
     if (chrome.notifications && chrome.notifications.create) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icons/icon128.png',
+        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
         title: `Segmenta — ${title}`,
         message,
         priority: 2,
@@ -648,12 +648,20 @@ if (chrome.downloads?.onDeterminingFilename) {
     if (!shouldInterceptDownloadItem(item)) return;
 
     // In 'onDeterminingFilename', if auto-intercept is on, IMMEDIATELY call 'chrome.downloads.cancel(item.id)' and 'chrome.downloads.erase({ id: item.id })'
-    chrome.downloads.cancel(item.id, () => {
-      if (chrome.runtime.lastError) {
-        // ignore
+    try {
+      if (item.state === 'in_progress') {
+        chrome.downloads.cancel(item.id, () => {
+          if (chrome.runtime.lastError) {
+            // Ignore harmless state race error
+          }
+        });
+        chrome.downloads.erase({ id: item.id }, () => {
+          if (chrome.runtime.lastError) {}
+        });
       }
-      chrome.downloads.erase({ id: item.id }, () => {});
-    });
+    } catch (err) {
+      console.warn('Error canceling download in onDeterminingFilename:', err);
+    }
 
     processInterceptedDownload(item);
   });
@@ -666,12 +674,20 @@ if (chrome.downloads?.onCreated) {
     if (!shouldInterceptDownloadItem(downloadItem)) return;
 
     // Instantly cancel and erase browser download to prevent browser holding the file
-    chrome.downloads.cancel(downloadItem.id, () => {
-      if (chrome.runtime.lastError) {
-        // ignore
+    try {
+      if (downloadItem.state === 'in_progress') {
+        chrome.downloads.cancel(downloadItem.id, () => {
+          if (chrome.runtime.lastError) {
+            // Ignore harmless state race error
+          }
+        });
+        chrome.downloads.erase({ id: downloadItem.id }, () => {
+          if (chrome.runtime.lastError) {}
+        });
       }
-      chrome.downloads.erase({ id: downloadItem.id }, () => {});
-    });
+    } catch (err) {
+      console.warn('Error canceling download in onCreated:', err);
+    }
 
     processInterceptedDownload(downloadItem);
   });
