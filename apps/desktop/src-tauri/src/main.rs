@@ -140,13 +140,7 @@ async fn resume_task(task_id: String, state: State<'_, AppState>) -> Result<(), 
         let guard = state.engine.lock().map_err(|e| e.to_string())?;
         guard.clone()
     };
-    let tid = task_id.clone();
-    tokio::spawn(async move {
-        if let Err(e) = engine.start_download(&tid, None).await {
-            eprintln!("[Worker Error] Resume Task {} failed: {}", tid, e);
-        }
-    });
-    Ok(())
+    engine.resume_task(&task_id).await
 }
 
 #[tauri::command]
