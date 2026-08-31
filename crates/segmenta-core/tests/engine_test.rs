@@ -104,3 +104,28 @@ async fn test_engine_set_speed_limit() {
 
     engine.set_speed_limit(Some(500_000));
 }
+
+#[tokio::test]
+async fn test_engine_unknown_content_length_and_single_segment() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let db_path = temp_dir.path().join("engine_stream_test.db");
+    let storage = Storage::new(&db_path).unwrap();
+    let engine = DownloadEngine::new(storage, temp_dir.path().to_str().unwrap().to_string());
+
+    // Task created with fallback filename and single segment when length is unknown
+    let task_id = engine
+        .add_task(
+            "https://httpbin.org/stream-bytes/5000".to_string(),
+            "".to_string(),
+            temp_dir.path().to_str().unwrap().to_string(),
+            8,
+            HashMap::new(),
+        )
+        .await
+        .unwrap();
+
+    let task = engine.get_task(&task_id).unwrap().unwrap();
+    assert_eq!(task.filename, "5000");
+    assert_eq!(task.status, TaskStatus::Queued);
+}
+

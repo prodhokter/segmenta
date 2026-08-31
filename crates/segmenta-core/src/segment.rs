@@ -141,12 +141,26 @@ pub async fn download_segment(
         return Err(err_msg);
     }
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(file_path)
-        .await
-        .map_err(|e| format!("File open error: {}", e))?;
+    // If server returned 200 OK instead of 206 Partial Content, the entire content is served from offset 0
+    let (mut file, mut current_bytes) = if status == reqwest::StatusCode::OK && existing_bytes > 0 {
+        segment.downloaded_bytes = 0;
+        let f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(file_path)
+            .await
+            .map_err(|e| format!("File open error: {}", e))?;
+        (f, 0u64)
+    } else {
+        let f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(file_path)
+            .await
+            .map_err(|e| format!("File open error: {}", e))?;
+        (f, existing_bytes)
+    };
 
     let mut stream = res.bytes_stream();
     while let Some(chunk_res) = stream.next().await {
@@ -168,9 +182,10 @@ pub async fn download_segment(
             err
         })?;
 
-        segment.downloaded_bytes += len as u64;
+        current_bytes += len as u64;
+        segment.downloaded_bytes = current_bytes;
         let _ = progress_tx
-            .send((segment.segment_index, segment.downloaded_bytes))
+            .send((segment.segment_index, current_bytes))
             .await;
     }
 

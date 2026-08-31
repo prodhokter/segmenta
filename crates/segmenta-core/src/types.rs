@@ -112,3 +112,45 @@ pub struct SegmentRecord {
     pub last_error: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppSettings {
+    pub download_dir: String,
+    pub max_concurrent_downloads: usize,
+    pub default_segments: u32,
+    pub speed_limit_kb: u64,
+    pub theme: String,
+    pub auto_categorize: bool,
+    #[serde(default)]
+    pub autostart: bool,
+    #[serde(default)]
+    pub start_minimized: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            download_dir: dirs_fallback_download_dir(),
+            max_concurrent_downloads: 3,
+            default_segments: 8,
+            speed_limit_kb: 0,
+            theme: "system".to_string(),
+            auto_categorize: true,
+            autostart: false,
+            start_minimized: false,
+        }
+    }
+}
+
+fn dirs_fallback_download_dir() -> String {
+    if let Some(user_dirs) = std::env::var_os("USERPROFILE") {
+        let p = std::path::PathBuf::from(user_dirs).join("Downloads");
+        return p.to_string_lossy().to_string();
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let p = std::path::PathBuf::from(home).join("Downloads");
+        return p.to_string_lossy().to_string();
+    }
+    "C:\\Downloads".to_string()
+}
+
