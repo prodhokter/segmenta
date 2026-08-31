@@ -7,17 +7,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --bg-color: #09090b;
-        --card-bg: #121215;
-        --border-color: #27272a;
+        --bg-color: #0b0f19;
+        --card-bg: #111827;
+        --card-subtle: #1e293b;
+        --border-color: rgba(255, 255, 255, 0.08);
+        --border-focus: rgba(99, 102, 241, 0.4);
         --text-primary: #f8fafc;
         --text-secondary: #94a3b8;
+        --text-muted: #64748b;
         --brand-primary: #4f46e5;
+        --brand-primary-hover: #4338ca;
         --brand-accent: #06b6d4;
         --success: #10b981;
         --danger: #ef4444;
@@ -31,126 +35,160 @@
       }
 
       body {
-        width: 360px;
+        width: 380px;
+        min-height: 520px;
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         background-color: var(--bg-color);
         color: var(--text-primary);
         font-size: 13px;
         line-height: 1.5;
-        padding: 14px;
+        padding: 14px 16px;
         user-select: none;
+        overflow-x: hidden;
       }
 
+      /* Top Header */
       .header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding-bottom: 12px;
         border-bottom: 1px solid var(--border-color);
-        margin-bottom: 12px;
+        margin-bottom: 14px;
       }
 
       .brand {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
       }
 
       .logo-icon {
-        width: 24px;
-        height: 24px;
-        border-radius: 6px;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
         background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
         font-weight: 800;
-        font-size: 12px;
-        box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.45);
+        letter-spacing: -0.05em;
+      }
+
+      .brand-info {
+        display: flex;
+        flex-direction: column;
       }
 
       .brand-name {
-        font-weight: 700;
-        font-size: 14px;
-        letter-spacing: -0.02em;
+        font-weight: 800;
+        font-size: 15px;
+        letter-spacing: -0.03em;
+        background: linear-gradient(135deg, #ffffff 40%, #cbd5e1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
 
+      .brand-tagline {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      /* Connection Status Badge with Live Pulse */
       .status-pill {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
         font-size: 11px;
         font-weight: 600;
-        padding: 3px 8px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--text-secondary);
+        padding: 4px 10px;
+        border-radius: 20px;
+        transition: all 0.25s ease;
+      }
+
+      .status-dot-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 8px;
+        height: 8px;
       }
 
       .status-dot {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background-color: var(--text-secondary);
+        position: relative;
+        z-index: 2;
+      }
+
+      .status-pulse {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        opacity: 0.75;
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      }
+
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(0.6);
+          opacity: 0.8;
+        }
+        80%, 100% {
+          transform: scale(2.2);
+          opacity: 0;
+        }
       }
 
       .status-pill.online {
-        color: var(--success);
+        color: #34d399;
         background: rgba(16, 185, 129, 0.12);
-        border: 1px solid rgba(16, 185, 129, 0.2);
+        border: 1px solid rgba(16, 185, 129, 0.3);
       }
       .status-pill.online .status-dot {
         background-color: var(--success);
-        box-shadow: 0 0 6px var(--success);
+      }
+      .status-pill.online .status-pulse {
+        background-color: rgba(16, 185, 129, 0.6);
       }
 
       .status-pill.offline {
-        color: var(--danger);
+        color: #f87171;
         background: rgba(239, 68, 68, 0.12);
-        border: 1px solid rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.3);
       }
       .status-pill.offline .status-dot {
         background-color: var(--danger);
       }
-
-      .section-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 8px;
+      .status-pill.offline .status-pulse {
+        display: none;
       }
 
-      .section-title {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--text-secondary);
-      }
-
-      .badge-count {
-        font-size: 10px;
-        font-weight: 700;
-        padding: 1px 6px;
-        border-radius: 10px;
-        background: var(--brand-primary);
-        color: white;
-      }
-
+      /* Card Elements */
       .card {
-        background-color: var(--card-bg);
+        background: var(--card-bg);
         border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 10px;
+        border-radius: 10px;
+        padding: 12px;
         margin-bottom: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
       }
 
-      /* Switch toggle styles */
+      /* Toggle Switch */
       .toggle-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 12px;
       }
 
       .toggle-info {
@@ -158,22 +196,27 @@
         flex-direction: column;
       }
 
-      .toggle-label {
-        font-weight: 600;
-        font-size: 12px;
+      .toggle-title {
+        font-weight: 700;
+        font-size: 12.5px;
         color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
 
       .toggle-desc {
-        font-size: 10px;
+        font-size: 11px;
         color: var(--text-secondary);
+        margin-top: 1px;
       }
 
       .switch {
         position: relative;
         display: inline-block;
-        width: 38px;
-        height: 20px;
+        width: 44px;
+        height: 24px;
+        flex-shrink: 0;
       }
 
       .switch input {
@@ -189,75 +232,126 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: #3f3f46;
-        transition: 0.2s;
-        border-radius: 20px;
+        background-color: #334155;
+        transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
       }
 
       .slider:before {
         position: absolute;
         content: "";
-        height: 14px;
-        width: 14px;
-        left: 3px;
-        bottom: 3px;
+        height: 18px;
+        width: 18px;
+        left: 2px;
+        bottom: 2px;
         background-color: white;
-        transition: 0.2s;
+        transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
       }
 
       input:checked + .slider {
         background-color: var(--brand-primary);
+        border-color: rgba(99, 102, 241, 0.6);
       }
 
       input:checked + .slider:before {
-        transform: translateX(18px);
+        transform: translateX(20px);
       }
 
-      .btn {
-        width: 100%;
+      /* Section Headers */
+      .section-header {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        padding: 0 2px;
+      }
+
+      .section-title-wrap {
+        display: flex;
+        align-items: center;
         gap: 6px;
-        background: var(--brand-primary);
-        color: #ffffff;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 12px;
-        font-size: 12px;
-        font-weight: 600;
+      }
+
+      .section-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
+      }
+
+      .badge-count {
+        font-size: 10px;
+        font-weight: 800;
+        padding: 1px 7px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+        color: white;
+      }
+
+      .section-action {
+        font-size: 11px;
+        color: var(--brand-accent);
         cursor: pointer;
-        transition: all 0.15s ease;
+        background: none;
+        border: none;
+        font-weight: 600;
+        transition: color 0.15s ease;
       }
 
-      .btn:hover {
-        background: #4338ca;
+      .section-action:hover {
+        color: #38bdf8;
+        text-decoration: underline;
       }
 
+      /* Stream and Recent Lists */
       .stream-list {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        max-height: 160px;
+        max-height: 155px;
         overflow-y: auto;
+        padding-right: 2px;
+      }
+
+      .stream-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      .stream-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
       }
 
       .stream-item {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 6px 8px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 6px;
-        font-size: 11px;
-        gap: 6px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        gap: 8px;
+        transition: all 0.15s ease;
       }
 
       .stream-item:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(99, 102, 241, 0.3);
+        background: rgba(255, 255, 255, 0.05);
+        border-color: var(--border-focus);
+      }
+
+      .stream-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: rgba(79, 70, 229, 0.15);
+        color: #818cf8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
       }
 
       .stream-info {
@@ -265,6 +359,7 @@
         flex-direction: column;
         overflow: hidden;
         flex: 1;
+        min-width: 0;
       }
 
       .stream-title {
@@ -272,88 +367,195 @@
         overflow: hidden;
         text-overflow: ellipsis;
         color: var(--text-primary);
-        font-weight: 500;
+        font-weight: 600;
+        font-size: 11.5px;
       }
 
       .stream-meta {
         font-size: 10px;
-        color: var(--text-secondary);
+        color: var(--text-muted);
         display: flex;
         align-items: center;
         gap: 6px;
+        margin-top: 2px;
       }
 
       .stream-tag {
         font-size: 9px;
         font-weight: 700;
-        padding: 1px 4px;
+        padding: 1px 5px;
         border-radius: 4px;
         text-transform: uppercase;
+        letter-spacing: 0.02em;
       }
 
       .stream-tag.hls {
-        background: rgba(6, 182, 212, 0.15);
-        color: var(--brand-accent);
+        background: rgba(6, 182, 212, 0.18);
+        color: #22d3ee;
+        border: 1px solid rgba(6, 182, 212, 0.3);
       }
 
       .stream-tag.dash {
-        background: rgba(245, 158, 11, 0.15);
-        color: var(--warning);
+        background: rgba(245, 158, 11, 0.18);
+        color: #fbbf24;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
+
+      .stream-tag.youtube {
+        background: rgba(239, 68, 68, 0.18);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.3);
       }
 
       .stream-tag.direct {
-        background: rgba(16, 185, 129, 0.15);
-        color: var(--success);
+        background: rgba(16, 185, 129, 0.18);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.3);
       }
 
-      .stream-tag.chunk {
-        background: rgba(148, 163, 184, 0.15);
-        color: var(--text-secondary);
+      .stream-tag.res-badge {
+        background: rgba(99, 102, 241, 0.2);
+        color: #a5b4fc;
+        border: 1px solid rgba(99, 102, 241, 0.4);
       }
 
       .btn-download-stream {
-        background: #4f46e5;
+        background: var(--brand-primary);
         border: none;
         color: white;
-        border-radius: 4px;
-        padding: 3px 8px;
-        font-size: 10px;
-        font-weight: 600;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
         cursor: pointer;
         white-space: nowrap;
-        transition: background 0.15s ease;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
       }
 
       .btn-download-stream:hover {
-        background: #4338ca;
+        background: var(--brand-primary-hover);
+        transform: translateY(-1px);
       }
 
       .empty-state {
         text-align: center;
-        color: var(--text-secondary);
+        color: var(--text-muted);
         font-size: 11px;
-        padding: 12px 0;
+        padding: 16px 8px;
+        background: rgba(255, 255, 255, 0.015);
+        border-radius: 6px;
+      }
+
+      /* Primary Action Button */
+      .btn-primary {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: linear-gradient(135deg, var(--brand-primary), #6366f1);
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        padding: 9px 14px;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+        margin-bottom: 14px;
+      }
+
+      .btn-primary:hover {
+        background: linear-gradient(135deg, #4338ca, #4f46e5);
+        box-shadow: 0 6px 18px rgba(79, 70, 229, 0.5);
+        transform: translateY(-1px);
+      }
+
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .btn-icon-link {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+      }
+
+      .btn-icon-link:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border-color);
+        font-size: 10.5px;
+        color: var(--text-muted);
+      }
+
+      .footer-links {
+        display: flex;
+        gap: 12px;
+      }
+
+      .footer-links a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: color 0.15s ease;
+      }
+
+      .footer-links a:hover {
+        color: #ffffff;
       }
     </style>
   </head>
   <body>
+    <!-- Top Header -->
     <div class="header">
       <div class="brand">
         <div class="logo-icon">S</div>
-        <div class="brand-name">Segmenta</div>
+        <div class="brand-info">
+          <div class="brand-name">Segmenta</div>
+          <div class="brand-tagline">Download Manager</div>
+        </div>
       </div>
-      <div id="status-badge" class="status-pill offline">
-        <span class="status-dot"></span>
+      <div id="status-badge" class="status-pill offline" title="Segmenta Engine IPC & HTTP Status">
+        <div class="status-dot-wrapper">
+          <div class="status-pulse"></div>
+          <div class="status-dot"></div>
+        </div>
         <span id="status-text">Desktop Offline</span>
       </div>
     </div>
 
-    <!-- Interception Toggle Card -->
+    <!-- Automatic Catch Downloads Toggle -->
     <div class="card">
       <div class="toggle-row">
         <div class="toggle-info">
-          <span class="toggle-label">Auto-Interception</span>
-          <span class="toggle-desc">Capture browser file downloads</span>
+          <div class="toggle-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Catch Downloads Automatically</span>
+          </div>
+          <div class="toggle-desc">Auto-accelerate all web downloads & media</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="toggle-auto-intercept" checked />
@@ -362,32 +564,53 @@
       </div>
     </div>
 
-    <!-- Active Tab Detected Streams -->
+    <!-- Sniffed Media Streams Section -->
     <div class="section-header">
-      <div class="section-title">Detected Media (Active Tab)</div>
-      <span id="stream-count" class="badge-count">0</span>
+      <div class="section-title-wrap">
+        <span class="section-title">Sniffed Media Streams</span>
+        <span id="stream-count" class="badge-count">0</span>
+      </div>
+      <button id="btn-clear-streams" class="section-action" style="display: none;">Clear</button>
     </div>
-    <div class="card" style="padding: 6px;">
+    <div class="card" style="padding: 6px; margin-bottom: 12px;">
       <div id="stream-container" class="stream-list">
-        <div class="empty-state">No media streams sniffed on this tab.</div>
+        <div class="empty-state">No media streams sniffed on current tab.</div>
       </div>
     </div>
 
-    <!-- Quick Actions -->
-    <button id="btn-download-tab" class="btn" style="margin-bottom: 12px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Quick Grab Video Action Button -->
+    <button id="btn-download-tab" class="btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
       </svg>
-      Grab Video / Audio on Page
+      <span>Sniff & Grab Media on Page</span>
     </button>
 
-    <!-- Recent Captured Downloads -->
+    <!-- Recent Intercepted Downloads Section -->
     <div class="section-header">
-      <div class="section-title">Recent Handled Downloads</div>
+      <div class="section-title-wrap">
+        <span class="section-title">Recent Downloads</span>
+      </div>
+      <button id="btn-open-folder" class="section-action" title="Open Download Folder in Explorer/Finder">
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Open Folder</span>
+        </span>
+      </button>
     </div>
     <div class="card" style="padding: 6px; margin-bottom: 0;">
       <div id="recent-container" class="stream-list">
-        <div class="empty-state">No downloads intercepted yet.</div>
+        <div class="empty-state">No recent downloads intercepted yet.</div>
+      </div>
+    </div>
+
+    <!-- Footer Meta -->
+    <div class="footer">
+      <span>Segmenta v1.0.0</span>
+      <div class="footer-links">
+        <a href="#" id="link-open-dashboard">Open App</a>
       </div>
     </div>
 
