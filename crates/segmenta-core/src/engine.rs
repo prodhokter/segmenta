@@ -167,7 +167,7 @@ impl DownloadEngine {
             if p.is_dir()
                 || save_path.ends_with('/')
                 || save_path.ends_with('\\')
-                || !save_path.ends_with(&filename)
+                || p.file_name().map_or(true, |f| f != filename.as_str())
             {
                 p.join(&filename).to_string_lossy().to_string()
             } else {
@@ -278,13 +278,24 @@ impl DownloadEngine {
         if is_m3u8 {
             let (tx, mut rx) = mpsc::channel::<(u32, u32)>(100);
             let progress_sender_clone = progress_sender.clone();
+            let storage_clone = self.storage.clone();
             let task_clone = task.clone();
+            let task_id_str = task_id.to_string();
             let progress_hdl = tokio::spawn(async move {
+                let mut last_save = std::time::Instant::now();
                 while let Some((curr, total)) = rx.recv().await {
+                    let dl_size = curr as u64;
+                    let tot_size = total as u64;
+
+                    if last_save.elapsed() >= std::time::Duration::from_millis(100) {
+                        let _ = storage_clone.update_task_progress(&task_id_str, dl_size);
+                        last_save = std::time::Instant::now();
+                    }
+
                     if let Some(ref sender) = progress_sender_clone {
                         let mut t = task_clone.clone();
-                        t.downloaded_size = curr as u64;
-                        t.total_size = Some(total as u64);
+                        t.downloaded_size = dl_size;
+                        t.total_size = Some(tot_size);
                         let _ = sender.send(t);
                     }
                 }
@@ -395,6 +406,7 @@ impl DownloadEngine {
         let storage_clone = self.storage.clone();
         let progress_sender_clone = progress_sender.clone();
         let mut task_state = task.clone();
+        let task_id_str = task_id.to_string();
 
         let progress_handle = tokio::spawn(async move {
             let mut last_save = std::time::Instant::now();
@@ -404,15 +416,29 @@ impl DownloadEngine {
                 segment_progress.insert(seg_idx, bytes_for_seg);
                 let total_downloaded: u64 = segment_progress.values().sum();
 
-                if last_save.elapsed() >= std::time::Duration::from_millis(500) {
+                if last_save.elapsed() >= std::time::Duration::from_millis(100) {
+                    let _ = storage_clone.update_segment_progress(&task_id_str, seg_idx, bytes_for_seg);
+                    let _ = storage_clone.update_task_progress(&task_id_str, total_downloaded);
+
                     task_state.downloaded_size = total_downloaded;
                     task_state.updated_at = Utc::now();
-                    let _ = storage_clone.save_task(&task_state);
                     if let Some(ref sender) = progress_sender_clone {
                         let _ = sender.send(task_state.clone());
                     }
                     last_save = std::time::Instant::now();
                 }
+            }
+
+            // Final progress update when channel closes
+            let total_downloaded: u64 = segment_progress.values().sum();
+            for (&idx, &bytes) in &segment_progress {
+                let _ = storage_clone.update_segment_progress(&task_id_str, idx, bytes);
+            }
+            let _ = storage_clone.update_task_progress(&task_id_str, total_downloaded);
+            task_state.downloaded_size = total_downloaded;
+            task_state.updated_at = Utc::now();
+            if let Some(ref sender) = progress_sender_clone {
+                let _ = sender.send(task_state.clone());
             }
         });
 

@@ -59,6 +59,15 @@ async fn test_storage_task_crud_and_segments() {
     assert_eq!(segments.len(), 1);
     assert_eq!(segments[0].segment_index, 0);
 
+    // Test fast progress updates
+    storage.update_segment_progress("task-123", 0, 1024).unwrap();
+    let segments_after = storage.get_segments_for_task("task-123").unwrap();
+    assert_eq!(segments_after[0].downloaded_bytes, 1024);
+
+    storage.update_task_progress("task-123", 1024).unwrap();
+    let task_after = storage.get_task("task-123").unwrap().unwrap();
+    assert_eq!(task_after.downloaded_size, 1024);
+
     storage
         .update_task_status("task-123", TaskStatus::Downloading, None)
         .unwrap();

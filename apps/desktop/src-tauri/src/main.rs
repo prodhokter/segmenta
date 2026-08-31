@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use segmenta_core::engine::DownloadEngine;
 use segmenta_core::media::{parse_m3u8, HlsPlaylist, VariantStream};
 use segmenta_core::scheduler::ScheduleRule;
+use segmenta_core::server::start_http_server;
 use segmenta_core::storage::Storage;
 use segmenta_core::types::{SegmentRecord, TaskRecord};
 use serde::{Deserialize, Serialize};
@@ -303,6 +304,14 @@ async fn main() {
     let db_path = temp_dir.join("segmenta.db");
     let storage = Storage::new(&db_path).expect("Failed to initialize database");
     let engine = DownloadEngine::new(storage, temp_dir.to_str().unwrap().to_string());
+
+    // Start embedded HTTP server on 127.0.0.1:45678 for browser extensions & local integration
+    let engine_http = engine.clone();
+    tokio::spawn(async move {
+        if let Err(e) = start_http_server(engine_http, "127.0.0.1:45678").await {
+            eprintln!("[Desktop HTTP Server] Could not bind 127.0.0.1:45678: {}", e);
+        }
+    });
 
     // Background scheduler loop to poll scheduled and queued tasks
     let engine_sched = engine.clone();

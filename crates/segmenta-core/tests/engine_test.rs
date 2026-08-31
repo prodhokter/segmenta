@@ -71,6 +71,31 @@ async fn test_engine_pause_and_cancel_task() {
 }
 
 #[tokio::test]
+async fn test_engine_save_path_resolution() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let db_path = temp_dir.path().join("engine_path_test.db");
+    let storage = Storage::new(&db_path).unwrap();
+    let engine = DownloadEngine::new(storage, temp_dir.path().to_str().unwrap().to_string());
+
+    // When save_path is just a directory
+    let dir_save_path = temp_dir.path().to_str().unwrap().to_string();
+    let task_id = engine
+        .add_task(
+            "https://example.com/somefile.zip".to_string(),
+            "somefile.zip".to_string(),
+            dir_save_path.clone(),
+            2,
+            HashMap::new(),
+        )
+        .await
+        .unwrap();
+
+    let task = engine.get_task(&task_id).unwrap().unwrap();
+    let expected_file_path = temp_dir.path().join("somefile.zip").to_string_lossy().to_string();
+    assert_eq!(task.save_path, expected_file_path);
+}
+
+#[tokio::test]
 async fn test_engine_set_speed_limit() {
     let temp_dir = tempfile::tempdir().unwrap();
     let db_path = temp_dir.path().join("engine_speed_test.db");
