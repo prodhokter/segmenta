@@ -51,10 +51,14 @@ pub fn get_default_download_dir() -> String {
         .to_string()
 }
 
-pub async fn start_http_server(
+pub async fn start_http_server<F>(
     engine: DownloadEngine,
     addr_str: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    on_task_created: Option<F>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    F: Fn(String) + Send + Sync + 'static + Clone,
+{
     let listener = TcpListener::bind(addr_str).await?;
     let engine = Arc::new(engine);
 
@@ -63,8 +67,9 @@ pub async fn start_http_server(
             match listener.accept().await {
                 Ok((stream, _)) => {
                     let engine_clone = engine.clone();
+                    let on_task_created_clone = on_task_created.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = handle_connection(stream, engine_clone).await {
+                        if let Err(e) = handle_connection(stream, engine_clone, on_task_created_clone).await {
                             eprintln!("[HTTP Server] Connection error: {}", e);
                         }
                     });
@@ -80,10 +85,14 @@ pub async fn start_http_server(
     Ok(())
 }
 
-async fn handle_connection(
+async fn handle_connection<F>(
     mut stream: TcpStream,
     engine: Arc<DownloadEngine>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    on_task_created: Option<F>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    F: Fn(String) + Send + Sync + 'static,
+{
     let mut buffer = vec![0u8; 64 * 1024];
     let mut total_read = 0;
 
@@ -169,6 +178,10 @@ Content-Length: 0\r\n\r\n";
                     .await
                 {
                     Ok(task_id) => {
+                        if let Some(ref cb) = on_task_created {
+                            cb(task_id.clone());
+                        }
+
                         let worker = engine.as_ref().clone();
                         let tid = task_id.clone();
                         tokio::spawn(async move {

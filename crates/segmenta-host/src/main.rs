@@ -166,7 +166,7 @@ async fn main() -> io::Result<()> {
     // Also start embedded HTTP server in background in case extension uses fallback
     let engine_http = engine.clone();
     tokio::spawn(async move {
-        let _ = start_http_server(engine_http, "127.0.0.1:45678").await;
+        let _ = start_http_server::<fn(String)>(engine_http, "127.0.0.1:45678", None).await;
     });
 
     let stdin = io::stdin();

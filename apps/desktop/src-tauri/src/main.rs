@@ -14,13 +14,44 @@ use segmenta_core::types::{AppSettings, SegmentRecord, TaskRecord};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tray::setup_tray;
 
 struct AppState {
     engine: Mutex<DownloadEngine>,
 }
 
+pub fn spawn_progress_window(app: &AppHandle, task_id: &str) -> Result<(), String> {
+    let window_label = format!("download-progress-{}", task_id);
+
+    // If window already exists, focus and show it
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        let _ = existing_window.show();
+        let _ = existing_window.unminimize();
+        let _ = existing_window.set_focus();
+        return Ok(());
+    }
+
+    let url_str = format!("/progress?id={}", task_id);
+    let webview_url = WebviewUrl::App(url_str.into());
+
+    let win_builder = WebviewWindowBuilder::new(app, &window_label, webview_url)
+        .title("Download Status — Segmenta")
+        .inner_size(500.0, 310.0)
+        .min_inner_size(460.0, 280.0)
+        .resizable(false)
+        .decorations(true)
+        .center();
+
+    let _window = win_builder.build().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn open_progress_window(task_id: String, app: AppHandle) -> Result<(), String> {
+    spawn_progress_window(&app, &task_id)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduledTaskItem {
@@ -53,7 +84,9 @@ async fn add_task(
     save_path: String,
     segments: Option<u32>,
     headers: Option<HashMap<String, String>>,
+    open_progress: Option<bool>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<String, String> {
     let engine = {
         let guard = state.engine.lock().map_err(|e| e.to_string())?;
@@ -64,6 +97,21 @@ async fn add_task(
     let task_id = engine
         .add_task(url, filename, save_path, seg_count, hdrs)
         .await?;
+
+    // Check if auto-popup progress dialog setting is enabled
+    let should_popup = if let Some(explicit) = open_progress {
+        explicit
+    } else if let Ok(Some(json_str)) = engine.get_setting("app_settings") {
+        serde_json::from_str::<AppSettings>(&json_str)
+            .map(|s| s.show_progress_dialog)
+            .unwrap_or(true)
+    } else {
+        true
+    };
+
+    if should_popup {
+        let _ = spawn_progress_window(&app, &task_id);
+    }
 
     // Auto-start download in background worker
     let engine_worker = engine.clone();
@@ -322,11 +370,18 @@ async fn main() {
     let db_path = temp_dir.join("segmenta.db");
     let storage = Storage::new(&db_path).expect("Failed to initialize database");
     let engine = DownloadEngine::new(storage, temp_dir.to_str().unwrap().to_string());
+    let engine_copy = engine.clone();
+
+    let (task_tx, mut task_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
 
     // Start embedded HTTP server on 127.0.0.1:45678 for browser extensions & local integration
     let engine_http = engine.clone();
+    let task_tx_clone = task_tx.clone();
     tokio::spawn(async move {
-        if let Err(e) = start_http_server(engine_http, "127.0.0.1:45678").await {
+        let cb = move |task_id: String| {
+            let _ = task_tx_clone.send(task_id);
+        };
+        if let Err(e) = start_http_server(engine_http, "127.0.0.1:45678", Some(cb)).await {
             eprintln!("[Desktop HTTP Server] Could not bind 127.0.0.1:45678: {}", e);
         }
     });
@@ -358,11 +413,36 @@ async fn main() {
                     let _ = window.show();
                 }
             }
+
+            // Task event listener from HTTP server / Extension interception
+            let app_handle = app.handle().clone();
+            let engine_popup_check = engine_copy.clone();
+            tokio::spawn(async move {
+                while let Some(task_id) = task_rx.recv().await {
+                    let should_popup = if let Ok(Some(json_str)) = engine_popup_check.get_setting("app_settings") {
+                        serde_json::from_str::<AppSettings>(&json_str)
+                            .map(|s| s.show_progress_dialog)
+                            .unwrap_or(true)
+                    } else {
+                        true
+                    };
+
+                    if should_popup {
+                        let _ = spawn_progress_window(&app_handle, &task_id);
+                    }
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // Prevent window destruction and hide to system tray
+                // If closing a progress window, let Tauri destroy the progress window without cancelling download
+                if window.label().starts_with("download-progress-") {
+                    return;
+                }
+
+                // If closing main window, prevent destruction and hide to system tray
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -375,6 +455,7 @@ async fn main() {
             get_task,
             get_segments,
             add_task,
+            open_progress_window,
             pause_task,
             resume_task,
             cancel_task,

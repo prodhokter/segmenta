@@ -806,6 +806,15 @@
                   <Play class="w-3.5 h-3.5" /> {t('inspect.resume', currentLang)}
                 </button>
               {/if}
+
+              <button
+                type="button"
+                onclick={() => invokeCommand('open_progress_window', { taskId: selectedTask!.id, task_id: selectedTask!.id })}
+                class="px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-bold text-subtle dark:text-zinc-300 hover:text-heading dark:hover:text-white flex items-center gap-1.5 transition-all"
+                title="Pop out download dialog window"
+              >
+                <ExternalLink class="w-3.5 h-3.5 text-primary" /> Pop out
+              </button>
             </div>
 
             <button
