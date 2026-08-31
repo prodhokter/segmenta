@@ -13,6 +13,7 @@
     "downloads",
     "webRequest",
     "cookies",
+    "contextMenus",
     "nativeMessaging",
     "storage",
     "activeTab",
