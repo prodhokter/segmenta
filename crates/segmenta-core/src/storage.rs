@@ -305,6 +305,33 @@ impl Storage {
         Ok(segments)
     }
 
+    pub fn update_task_progress(
+        &self,
+        task_id: &str,
+        downloaded_size: u64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE tasks SET downloaded_size = ?1, updated_at = ?2 WHERE id = ?3",
+            params![downloaded_size, Utc::now().to_rfc3339(), task_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_segment_progress(
+        &self,
+        task_id: &str,
+        segment_index: u32,
+        downloaded_bytes: u64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE segments SET downloaded_bytes = ?1, updated_at = ?2 WHERE task_id = ?3 AND segment_index = ?4",
+            params![downloaded_bytes, Utc::now().to_rfc3339(), task_id, segment_index],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_task(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])?;

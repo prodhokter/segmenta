@@ -1,10 +1,10 @@
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use segmenta_core::engine::DownloadEngine;
+use segmenta_core::server::{get_default_download_dir, start_http_server};
 use segmenta_core::storage::Storage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct TaskCreatePayload {
@@ -55,18 +55,6 @@ pub enum HostResponse {
     },
     #[serde(rename = "ERROR")]
     Error { message: String },
-}
-
-pub fn get_default_download_dir() -> String {
-    if let Some(user_dirs) = std::env::var_os("USERPROFILE") {
-        let p = PathBuf::from(user_dirs).join("Downloads");
-        return p.to_string_lossy().to_string();
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        let p = PathBuf::from(home).join("Downloads");
-        return p.to_string_lossy().to_string();
-    }
-    std::env::temp_dir().join("SegmentaDownloads").to_string_lossy().to_string()
 }
 
 pub fn read_message<R: Read>(reader: &mut R) -> io::Result<Option<serde_json::Value>> {
@@ -174,6 +162,12 @@ async fn main() -> io::Result<()> {
     let storage = Storage::new(&db_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let engine = DownloadEngine::new(storage, temp_dir.to_string_lossy().to_string());
     let handle = tokio::runtime::Handle::current();
+
+    // Also start embedded HTTP server in background in case extension uses fallback
+    let engine_http = engine.clone();
+    tokio::spawn(async move {
+        let _ = start_http_server(engine_http, "127.0.0.1:45678").await;
+    });
 
     let stdin = io::stdin();
     let stdout = io::stdout();
