@@ -1,40 +1,50 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { TaskRecord, SegmentRecord, AppSettings, ScheduledTaskItem, VariantStream } from '$lib/types';
-  import Speedometer from '../components/Speedometer.svelte';
-  import SegmentInspector from '../components/SegmentInspector.svelte';
-  import TaskQueue from '../components/TaskQueue.svelte';
+  import type { TaskRecord, AppSettings, ScheduledTaskItem, VariantStream } from '$lib/types';
   import AddDownloadModal from '../components/AddDownloadModal.svelte';
   import SettingsModal from '../components/SettingsModal.svelte';
   import SchedulerModal from '../components/SchedulerModal.svelte';
   import {
     Plus,
-    Gauge,
-    Layers,
     Play,
     Pause,
-    RotateCcw,
-    Sliders,
-    Zap,
+    Calendar,
+    Settings as SettingsIcon,
+    Moon,
+    Sun,
+    Monitor,
+    Globe,
+    Check,
+    Search,
+    Trash2,
+    FolderOpen,
+    Copy,
+    ExternalLink,
+    Video,
+    Music,
+    Archive,
+    FileText,
+    AppWindow,
+    File,
     Download,
     CheckCircle2,
     Clock,
-    FolderOpen,
+    AlertCircle,
+    SlidersHorizontal,
+    Layers,
     Wifi,
-    Settings,
-    Calendar,
-    Sun,
-    Moon,
-    Monitor,
-    Globe,
-    Power,
-    Check,
-    Copy,
-    Trash2,
-    ExternalLink,
-    ShieldCheck,
-    Cpu,
-    Server
+    CheckSquare,
+    Square,
+    ChevronDown,
+    ChevronRight,
+    Sidebar as SidebarIcon,
+    Filter,
+    ArrowUpDown,
+    MoreHorizontal,
+    HardDrive,
+    Activity,
+    Info,
+    RefreshCw
   } from 'lucide-svelte';
 
   import { t, getLanguage, setLanguage, SUPPORTED_LANGUAGES, type LanguageCode } from '$lib/i18n';
@@ -56,17 +66,42 @@
   let currentLang = $state<LanguageCode>(getLanguage());
   let currentTheme = $state<'system' | 'light' | 'dark'>('system');
   let isDarkMode = $state(false);
+
+  // Core Data
   let tasks: TaskRecord[] = $state([]);
-  let selectedTaskId: string | null = $state(null);
-  let selectedSegments: SegmentRecord[] = $state([]);
   let scheduledTasks: ScheduledTaskItem[] = $state([]);
+  let selectedTaskIds = $state<Set<string>>(new Set());
+  let focusedTaskId = $state<string | null>(null);
+
+  // UI state
+  let isSidebarCollapsed = $state(false);
+  let activeNavFilter = $state<'all' | 'downloading' | 'completed' | 'paused' | 'failed' | 'queued'>('all');
+  let activeCategory = $state<'all' | 'video' | 'audio' | 'archives' | 'documents' | 'programs' | 'other'>('all');
+  let searchQuery = $state('');
+  let sortField = $state<'created_at' | 'filename' | 'total_size' | 'status' | 'downloaded_size'>('created_at');
+  let sortDirection = $state<'asc' | 'desc'>('desc');
+
+  // Modals & Popovers
   let isAddModalOpen = $state(false);
   let isSettingsModalOpen = $state(false);
   let isSchedulerModalOpen = $state(false);
   let isLangMenuOpen = $state(false);
-  let liveSpeedBytes = $state(0);
   let copiedToast = $state(false);
 
+  // Context Menu State
+  let contextMenu = $state<{
+    visible: boolean;
+    x: number;
+    y: number;
+    taskId: string | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    taskId: null
+  });
+
+  // Settings
   let settings: AppSettings = $state({
     download_dir: 'C:\\Downloads',
     max_concurrent_downloads: 3,
@@ -94,7 +129,7 @@
       segments_count: 8,
       speed_limit_bytes: null,
       priority: 5,
-      category_id: 'iso',
+      category_id: 'archives',
       headers: {},
       etag: '"sample-etag-123"',
       last_modified: '2026-08-30T12:00:00Z',
@@ -147,6 +182,50 @@
       created_at: new Date(Date.now() - 7200000).toISOString(),
       updated_at: new Date(Date.now() - 3600000).toISOString(),
       finished_at: null,
+    },
+    {
+      id: 'task-demo-4',
+      url: 'https://releases.llvm.org/18.1.8/LLVM-18.1.8-win64.exe',
+      filename: 'LLVM-18.1.8-win64.exe',
+      save_path: 'C:\\Downloads\\LLVM-18.1.8-win64.exe',
+      temp_path: 'C:\\Temp\\task-demo-4',
+      status: 'Queued',
+      total_size: 324500000,
+      downloaded_size: 0,
+      segments_count: 8,
+      speed_limit_bytes: null,
+      priority: 4,
+      category_id: 'programs',
+      headers: {},
+      etag: null,
+      last_modified: null,
+      checksum_sha256: null,
+      error_message: null,
+      created_at: new Date(Date.now() - 1800000).toISOString(),
+      updated_at: new Date().toISOString(),
+      finished_at: null,
+    },
+    {
+      id: 'task-demo-5',
+      url: 'https://standards.iso.org/ittf/PubliclyAvailableStandards/ISO_IEC_14882_2020.pdf',
+      filename: 'ISO_IEC_14882_2020.pdf',
+      save_path: 'C:\\Downloads\\ISO_IEC_14882_2020.pdf',
+      temp_path: 'C:\\Temp\\task-demo-5',
+      status: 'Completed',
+      total_size: 18450000,
+      downloaded_size: 18450000,
+      segments_count: 4,
+      speed_limit_bytes: null,
+      priority: 5,
+      category_id: 'documents',
+      headers: {},
+      etag: null,
+      last_modified: null,
+      checksum_sha256: null,
+      error_message: null,
+      created_at: new Date(Date.now() - 172800000).toISOString(),
+      updated_at: new Date(Date.now() - 172000000).toISOString(),
+      finished_at: new Date(Date.now() - 172000000).toISOString(),
     }
   ];
 
@@ -217,22 +296,89 @@
       if (t) t.status = 'Downloading';
       return undefined as unknown as T;
     }
-    if (cmd === 'cancel_task') {
+    if (cmd === 'cancel_task' || cmd === 'delete_task') {
       mockTasksStore = mockTasksStore.filter((x) => x.id !== args.taskId && x.id !== args.task_id);
       scheduledTasks = scheduledTasks.filter((x) => x.task.id !== args.taskId && x.task.id !== args.task_id);
       return undefined as unknown as T;
-    }
-    if (cmd === 'delete_task') {
-      mockTasksStore = mockTasksStore.filter((x) => x.id !== args.taskId && x.id !== args.task_id);
-      scheduledTasks = scheduledTasks.filter((x) => x.task.id !== args.taskId && x.task.id !== args.task_id);
-      return undefined as unknown as T;
-    }
-    if (cmd === 'get_segments') {
-      return [] as unknown as T;
     }
     return undefined as unknown as T;
   }
 
+  // File categorization helper
+  function getFileCategory(filename: string): 'video' | 'audio' | 'archives' | 'documents' | 'programs' | 'other' {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    if (['mp4', 'mkv', 'webm', 'avi', 'mov', 'ts', 'm3u8', 'flv', 'wmv'].includes(ext)) return 'video';
+    if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'opus'].includes(ext)) return 'audio';
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'iso', 'dmg', 'pkg', 'bz2', 'xz'].includes(ext)) return 'archives';
+    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'epub'].includes(ext)) return 'documents';
+    if (['exe', 'msi', 'appimage', 'deb', 'rpm', 'apk', 'dmg'].includes(ext)) return 'programs';
+    return 'other';
+  }
+
+  function getCategoryIcon(cat: string) {
+    switch (cat) {
+      case 'video':
+        return Video;
+      case 'audio':
+        return Music;
+      case 'archives':
+        return Archive;
+      case 'documents':
+        return FileText;
+      case 'programs':
+        return AppWindow;
+      default:
+        return File;
+    }
+  }
+
+  // Formatting helpers
+  function formatBytes(bytes: number | null): string {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function formatSpeed(bytesPerSec: number): string {
+    if (!bytesPerSec || bytesPerSec === 0) return '-';
+    if (bytesPerSec < 1024 * 1024) {
+      return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
+    }
+    return (bytesPerSec / (1024 * 1024)).toFixed(2) + ' MB/s';
+  }
+
+  function formatEta(task: TaskRecord, speed: number): string {
+    if (task.status === 'Completed') return '-';
+    if (task.status !== 'Downloading' || speed <= 0 || !task.total_size) return '--:--';
+    const remainingBytes = Math.max(0, task.total_size - task.downloaded_size);
+    const seconds = Math.ceil(remainingBytes / speed);
+    if (seconds >= 3600) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return `${h}h ${m}m`;
+    }
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+  }
+
+  function formatDate(isoString: string): string {
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return isoString;
+    }
+  }
+
+  // Theme Management
   function applyTheme(themeName: string) {
     if (typeof document === 'undefined') return;
     currentTheme = (themeName as 'system' | 'light' | 'dark') || 'system';
@@ -307,6 +453,9 @@
     }
   }
 
+  // Real-time speed tracking map
+  let taskSpeedMap = $state<Record<string, number>>({});
+
   async function refreshTasks() {
     try {
       const isTauri = typeof window !== 'undefined' && ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
@@ -314,16 +463,20 @@
         mockTasksStore.forEach((t) => {
           if (t.status === 'Downloading') {
             const step = Math.floor(2.2 * 1024 * 1024 + Math.random() * 512 * 1024);
+            taskSpeedMap[t.id] = step;
             if (t.total_size && t.total_size > 0) {
               t.downloaded_size = Math.min(t.total_size, t.downloaded_size + step);
               if (t.downloaded_size >= t.total_size) {
                 t.status = 'Completed';
                 t.finished_at = new Date().toISOString();
+                delete taskSpeedMap[t.id];
               }
             } else {
               t.downloaded_size += step;
             }
             t.updated_at = new Date().toISOString();
+          } else {
+            delete taskSpeedMap[t.id];
           }
         });
       }
@@ -331,51 +484,280 @@
       const list = await invokeCommand<TaskRecord[]>('list_tasks');
       if (list) {
         tasks = list;
-        if (!selectedTaskId && tasks.length > 0) {
-          selectedTaskId = tasks[0].id;
-        } else if (selectedTaskId && !tasks.some((t) => t.id === selectedTaskId)) {
-          selectedTaskId = tasks.length > 0 ? tasks[0].id : null;
-        }
       }
 
       const scheduled = await invokeCommand<ScheduledTaskItem[]>('list_scheduled');
       if (scheduled) {
         scheduledTasks = scheduled;
       }
-
-      const downloadingTasks = tasks.filter((t) => t.status === 'Downloading');
-      if (downloadingTasks.length > 0) {
-        const baseSpeed = downloadingTasks.length * 12.8 * 1024 * 1024;
-        const jitter = (Math.random() * 3 - 1.5) * 1024 * 1024;
-        liveSpeedBytes = Math.max(1024 * 1024, Math.floor(baseSpeed + jitter));
-      } else {
-        liveSpeedBytes = 0;
-      }
-
-      if (selectedTaskId) {
-        const segs = await invokeCommand<SegmentRecord[]>('get_segments', { taskId: selectedTaskId });
-        if (segs && segs.length > 0) {
-          selectedSegments = segs;
-        } else {
-          selectedSegments = [];
-        }
-      }
     } catch (e) {
       console.error('Refresh error:', e);
     }
   }
 
-  let selectedTask = $derived(tasks.find((t) => t.id === selectedTaskId) || null);
-  let activeDownloadingCount = $derived(tasks.filter((t) => t.status === 'Downloading').length);
+  // Derived counts & filtered list
+  let totalActiveDownloads = $derived(tasks.filter((t) => t.status === 'Downloading').length);
 
-  let progressPercent = $derived(
-    selectedTask && selectedTask.total_size && selectedTask.total_size > 0
-      ? Math.min(100, (selectedTask.downloaded_size / selectedTask.total_size) * 100)
-      : selectedTask?.status === 'Completed'
-        ? 100
-        : 0
+  let totalLiveSpeed = $derived(
+    Object.values(taskSpeedMap).reduce((acc, curr) => acc + curr, 0)
   );
 
+  let categoryCounts = $derived({
+    all: tasks.length,
+    video: tasks.filter((t) => getFileCategory(t.filename) === 'video').length,
+    audio: tasks.filter((t) => getFileCategory(t.filename) === 'audio').length,
+    archives: tasks.filter((t) => getFileCategory(t.filename) === 'archives').length,
+    documents: tasks.filter((t) => getFileCategory(t.filename) === 'documents').length,
+    programs: tasks.filter((t) => getFileCategory(t.filename) === 'programs').length,
+    other: tasks.filter((t) => getFileCategory(t.filename) === 'other').length,
+  });
+
+  let statusCounts = $derived({
+    all: tasks.length,
+    downloading: tasks.filter((t) => t.status === 'Downloading').length,
+    completed: tasks.filter((t) => t.status === 'Completed').length,
+    paused: tasks.filter((t) => t.status === 'Paused' || t.status === 'PausedByError').length,
+    failed: tasks.filter((t) => t.status === 'Failed').length,
+    queued: tasks.filter((t) => t.status === 'Queued').length,
+  });
+
+  let filteredTasks = $derived.by(() => {
+    let result = tasks.filter((t) => {
+      // Category filter
+      if (activeCategory !== 'all' && getFileCategory(t.filename) !== activeCategory) {
+        return false;
+      }
+      // Status filter
+      if (activeNavFilter !== 'all') {
+        if (activeNavFilter === 'downloading' && t.status !== 'Downloading') return false;
+        if (activeNavFilter === 'completed' && t.status !== 'Completed') return false;
+        if (activeNavFilter === 'paused' && t.status !== 'Paused' && t.status !== 'PausedByError') return false;
+        if (activeNavFilter === 'failed' && t.status !== 'Failed') return false;
+        if (activeNavFilter === 'queued' && t.status !== 'Queued') return false;
+      }
+      // Search filter
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase();
+        const matchName = t.filename.toLowerCase().includes(q);
+        const matchUrl = t.url.toLowerCase().includes(q);
+        if (!matchName && !matchUrl) return false;
+      }
+      return true;
+    });
+
+    // Sorting
+    result.sort((a, b) => {
+      let valA: any = a[sortField];
+      let valB: any = b[sortField];
+
+      if (sortField === 'created_at') {
+        valA = new Date(a.created_at).getTime();
+        valB = new Date(b.created_at).getTime();
+      } else if (sortField === 'total_size') {
+        valA = a.total_size || 0;
+        valB = b.total_size || 0;
+      } else if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = (valB || '').toLowerCase();
+      }
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  });
+
+  // Task Selection & Actions
+  let isAllSelected = $derived(
+    filteredTasks.length > 0 && filteredTasks.every((t) => selectedTaskIds.has(t.id))
+  );
+
+  function toggleSelectAll() {
+    if (isAllSelected) {
+      selectedTaskIds = new Set();
+    } else {
+      selectedTaskIds = new Set(filteredTasks.map((t) => t.id));
+    }
+  }
+
+  function handleRowClick(e: MouseEvent, taskId: string) {
+    if (e.ctrlKey || e.metaKey) {
+      const next = new Set(selectedTaskIds);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      selectedTaskIds = next;
+    } else if (e.shiftKey && focusedTaskId) {
+      const ids = filteredTasks.map((t) => t.id);
+      const fromIdx = ids.indexOf(focusedTaskId);
+      const toIdx = ids.indexOf(taskId);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const start = Math.min(fromIdx, toIdx);
+        const end = Math.max(fromIdx, toIdx);
+        const range = ids.slice(start, end + 1);
+        selectedTaskIds = new Set([...selectedTaskIds, ...range]);
+      }
+    } else {
+      selectedTaskIds = new Set([taskId]);
+    }
+    focusedTaskId = taskId;
+  }
+
+  function handleContextMenu(e: MouseEvent, taskId: string) {
+    e.preventDefault();
+    if (!selectedTaskIds.has(taskId)) {
+      selectedTaskIds = new Set([taskId]);
+      focusedTaskId = taskId;
+    }
+    contextMenu = {
+      visible: true,
+      x: Math.min(e.clientX, window.innerWidth - 220),
+      y: Math.min(e.clientY, window.innerHeight - 240),
+      taskId
+    };
+  }
+
+  function closeContextMenu() {
+    contextMenu.visible = false;
+  }
+
+  // Keyboard navigation
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      selectedTaskIds = new Set(filteredTasks.map((t) => t.id));
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (selectedTaskIds.size > 0) {
+        e.preventDefault();
+        handleDeleteSelected();
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const ids = filteredTasks.map((t) => t.id);
+      if (ids.length === 0) return;
+
+      let nextIdx = 0;
+      if (focusedTaskId) {
+        const currIdx = ids.indexOf(focusedTaskId);
+        if (e.key === 'ArrowDown') {
+          nextIdx = Math.min(ids.length - 1, currIdx + 1);
+        } else {
+          nextIdx = Math.max(0, currIdx - 1);
+        }
+      }
+      const nextId = ids[nextIdx];
+      focusedTaskId = nextId;
+      if (e.shiftKey) {
+        selectedTaskIds = new Set([...selectedTaskIds, nextId]);
+      } else {
+        selectedTaskIds = new Set([nextId]);
+      }
+    }
+  }
+
+  // Core Actions
+  async function handlePause(taskId: string) {
+    await invokeCommand('pause_task', { taskId, task_id: taskId });
+    await refreshTasks();
+  }
+
+  async function handleResume(taskId: string) {
+    await invokeCommand('resume_task', { taskId, task_id: taskId });
+    await refreshTasks();
+  }
+
+  async function handleDelete(taskId: string) {
+    await invokeCommand('cancel_task', { taskId, task_id: taskId, cleanupPartial: false });
+    const next = new Set(selectedTaskIds);
+    next.delete(taskId);
+    selectedTaskIds = next;
+    if (focusedTaskId === taskId) focusedTaskId = null;
+    await refreshTasks();
+  }
+
+  async function handlePauseAll() {
+    for (const t of tasks.filter((x) => x.status === 'Downloading')) {
+      await invokeCommand('pause_task', { taskId: t.id, task_id: t.id });
+    }
+    await refreshTasks();
+  }
+
+  async function handleResumeAll() {
+    for (const t of tasks.filter((x) => x.status === 'Paused' || x.status === 'Queued' || x.status === 'Failed')) {
+      await invokeCommand('resume_task', { taskId: t.id, task_id: t.id });
+    }
+    await refreshTasks();
+  }
+
+  async function handleClearCompleted() {
+    for (const t of tasks.filter((x) => x.status === 'Completed')) {
+      await invokeCommand('delete_task', { taskId: t.id, task_id: t.id, deleteFiles: false });
+    }
+    selectedTaskIds = new Set();
+    await refreshTasks();
+  }
+
+  async function handlePauseSelected() {
+    for (const id of selectedTaskIds) {
+      await invokeCommand('pause_task', { taskId: id, task_id: id });
+    }
+    await refreshTasks();
+  }
+
+  async function handleResumeSelected() {
+    for (const id of selectedTaskIds) {
+      await invokeCommand('resume_task', { taskId: id, task_id: id });
+    }
+    await refreshTasks();
+  }
+
+  async function handleDeleteSelected() {
+    for (const id of selectedTaskIds) {
+      await invokeCommand('cancel_task', { taskId: id, task_id: id, cleanupPartial: false });
+    }
+    selectedTaskIds = new Set();
+    await refreshTasks();
+  }
+
+  async function handleSpeedLimitChange(val: number) {
+    settings.speed_limit_kb = val;
+    const limitBytes = val > 0 ? val * 1024 : null;
+    await invokeCommand('set_speed_limit', { limitBytes, limit_bytes: limitBytes });
+    await invokeCommand('save_settings', { settings });
+  }
+
+  function handleSort(field: typeof sortField) {
+    if (sortField === field) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = field;
+      sortDirection = 'desc';
+    }
+  }
+
+  function copyUrl(url: string) {
+    try {
+      navigator.clipboard.writeText(url);
+      copiedToast = true;
+      setTimeout(() => (copiedToast = false), 2000);
+    } catch {}
+  }
+
+  function openContainingFolder(path: string) {
+    console.log('Open containing folder:', path);
+    // In Tauri, this can be hooked up to tauri plugin opener or shell
+  }
+
+  function openProgressPopout(taskId: string) {
+    invokeCommand('open_progress_window', { taskId, task_id: taskId }).catch(() => {});
+  }
+
+  // Modal Handlers
   async function handleAddTask(data: { url: string; filename: string; savePath: string; segments: number }) {
     const newId = await invokeCommand<string>('add_task', {
       url: data.url,
@@ -385,7 +767,8 @@
       segments: data.segments,
     });
     if (newId) {
-      selectedTaskId = newId;
+      selectedTaskIds = new Set([newId]);
+      focusedTaskId = newId;
     }
     await refreshTasks();
   }
@@ -410,7 +793,8 @@
       stop_at: data.stopAt,
     });
     if (newId) {
-      selectedTaskId = newId;
+      selectedTaskIds = new Set([newId]);
+      focusedTaskId = newId;
     }
     await refreshTasks();
   }
@@ -433,68 +817,40 @@
     return await invokeCommand<VariantStream[]>('probe_m3u8_variants', { url: m3u8Url });
   }
 
-  async function handlePause(taskId: string) {
-    await invokeCommand('pause_task', { taskId, task_id: taskId });
-    await refreshTasks();
-  }
-
-  async function handleResume(taskId: string) {
-    await invokeCommand('resume_task', { taskId, task_id: taskId });
-    await refreshTasks();
-  }
-
-  async function handleCancel(taskId: string) {
-    await invokeCommand('cancel_task', { taskId, task_id: taskId });
-    if (selectedTaskId === taskId) {
-      const remaining = tasks.filter((t) => t.id !== taskId);
-      selectedTaskId = remaining.length > 0 ? remaining[0].id : null;
+  function getStatusBadge(status: string) {
+    switch (status) {
+      case 'Downloading':
+        return {
+          label: t('status.downloading', currentLang),
+          bg: 'bg-primary/10 dark:bg-primary/20 text-primary dark:text-indigo-400 border-primary/20',
+          dot: 'bg-primary animate-pulse',
+        };
+      case 'Completed':
+        return {
+          label: t('status.completed', currentLang),
+          bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+          dot: 'bg-emerald-500',
+        };
+      case 'Paused':
+      case 'PausedByError':
+        return {
+          label: t('status.paused', currentLang),
+          bg: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-500/20',
+          dot: 'bg-amber-500',
+        };
+      case 'Failed':
+        return {
+          label: t('status.failed', currentLang),
+          bg: 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-500/20',
+          dot: 'bg-rose-500',
+        };
+      default:
+        return {
+          label: t('status.queued', currentLang),
+          bg: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-300 dark:border-zinc-700',
+          dot: 'bg-zinc-400',
+        };
     }
-    await refreshTasks();
-  }
-
-  async function handlePauseAll() {
-    for (const t of tasks.filter((x) => x.status === 'Downloading')) {
-      await invokeCommand('pause_task', { taskId: t.id, task_id: t.id });
-    }
-    await refreshTasks();
-  }
-
-  async function handleResumeAll() {
-    for (const t of tasks.filter((x) => x.status === 'Paused' || x.status === 'Queued')) {
-      await invokeCommand('resume_task', { taskId: t.id, task_id: t.id });
-    }
-    await refreshTasks();
-  }
-
-  async function handleClearCompleted() {
-    for (const t of tasks.filter((x) => x.status === 'Completed')) {
-      await invokeCommand('cancel_task', { taskId: t.id, task_id: t.id });
-    }
-    await refreshTasks();
-  }
-
-  async function handleSpeedLimitChange(val: number) {
-    settings.speed_limit_kb = val;
-    const limitBytes = val > 0 ? val * 1024 : null;
-    await invokeCommand('set_speed_limit', { limitBytes, limit_bytes: limitBytes });
-    await invokeCommand('save_settings', { settings });
-  }
-
-  function copySelectedUrl() {
-    if (!selectedTask) return;
-    try {
-      navigator.clipboard.writeText(selectedTask.url);
-      copiedToast = true;
-      setTimeout(() => (copiedToast = false), 2000);
-    } catch {}
-  }
-
-  function formatBytes(bytes: number | null): string {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
   onMount(() => {
@@ -516,31 +872,47 @@
 
     const interval = setInterval(refreshTasks, 1000);
 
-    const handleOutsideClick = (e: MouseEvent) => {
+    const handleGlobalClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('#lang-dropdown-btn') && !target.closest('#lang-dropdown-menu')) {
         isLangMenuOpen = false;
       }
+      if (!target.closest('#context-menu-container')) {
+        closeContextMenu();
+      }
     };
-    window.addEventListener('click', handleOutsideClick);
+
+    window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       clearInterval(interval);
       if (mql) {
         mql.removeEventListener('change', systemThemeListener);
       }
-      window.removeEventListener('click', handleOutsideClick);
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   });
 </script>
 
-<div class="flex flex-col h-screen overflow-hidden bg-canvas dark:bg-canvas-dark text-body dark:text-zinc-300 transition-colors duration-200 select-none">
-  <!-- Top App Navigation / Header with High-End Branding -->
-  <header class="h-16 bg-surface dark:bg-surface-dark border-b border-border-light dark:border-border-dark flex items-center justify-between px-5 sm:px-6 shadow-ambient z-30 shrink-0">
-    <!-- Left: Brand identity & Status pills -->
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-primary to-cyan-500 flex items-center justify-center text-white shadow-glow p-2 ring-1 ring-white/20">
+<div class="flex flex-col h-screen w-screen overflow-hidden bg-canvas dark:bg-canvas-dark text-body dark:text-zinc-200 select-none font-sans text-xs antialiased">
+  <!-- Top Application Header & Toolbar -->
+  <header class="h-12 bg-surface dark:bg-surface-dark border-b border-border-light dark:border-border-dark flex items-center justify-between px-3.5 z-30 shrink-0 shadow-sm">
+    <!-- Left: Branding & Quick Toggle -->
+    <div class="flex items-center gap-3">
+      <button
+        type="button"
+        onclick={() => (isSidebarCollapsed = !isSidebarCollapsed)}
+        class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-colors"
+        title={t('sidebar.collapse', currentLang)}
+      >
+        <SidebarIcon class="w-4 h-4" />
+      </button>
+
+      <!-- App Brand Title -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 via-primary to-cyan-500 flex items-center justify-center text-white shadow-sm p-1">
           <svg viewBox="0 0 24 24" class="w-full h-full fill-none stroke-current stroke-[2.5]" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 6H8a4 4 0 0 0-4 4c0 1.5.8 2.8 2 3.5" />
             <path d="M5 18h11a4 4 0 0 0 4-4c0-1.5-.8-2.8-2-3.5" />
@@ -549,53 +921,90 @@
             <path d="M15 15l-3 3-3-3" />
           </svg>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="font-extrabold text-base text-heading dark:text-white tracking-tight">
-              {t('app.title', currentLang)}
-            </h1>
-            <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-extrabold bg-primary/10 dark:bg-primary/20 text-primary dark:text-indigo-300 border border-primary/20">
-              {t('app.version_badge', currentLang)}
-            </span>
-          </div>
-          <p class="text-[11px] text-subtle dark:text-zinc-400 hidden sm:block">
-            {t('app.tagline', currentLang)}
-          </p>
-        </div>
+        <span class="font-extrabold text-sm text-heading dark:text-white tracking-tight hidden sm:inline">
+          {t('app.title', currentLang)}
+        </span>
+        <span class="text-[10px] px-1.5 py-0.2 rounded font-mono font-bold bg-primary/10 dark:bg-primary/20 text-primary dark:text-indigo-300 border border-primary/20 hidden md:inline">
+          {t('app.version_badge', currentLang)}
+        </span>
       </div>
 
-      <!-- Quick Status Indicators Pill -->
-      <div class="hidden md:flex items-center gap-2 pl-3 border-l border-border-light dark:border-border-dark">
-        <!-- Online Status Badge -->
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>{t('header.status_online', currentLang)}</span>
-        </div>
+      <!-- Quick Action Toolbar -->
+      <div class="flex items-center gap-1 pl-2.5 border-l border-border-light dark:border-border-dark">
+        <!-- Add URL Action -->
+        <button
+          type="button"
+          onclick={() => (isAddModalOpen = true)}
+          class="px-2.5 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold flex items-center gap-1.5 shadow-sm shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <Plus class="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>{t('nav.new_download', currentLang)}</span>
+        </button>
 
-        <!-- Active Downloads Count Badge -->
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 dark:bg-primary/20 border border-primary/20 text-[11px] font-mono font-bold text-primary dark:text-indigo-300">
-          <Download class="w-3 h-3 text-primary" />
-          <span>{activeDownloadingCount} {t('header.status_active', currentLang)}</span>
-        </div>
+        <!-- Pause All -->
+        <button
+          type="button"
+          onclick={handlePauseAll}
+          class="px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-300 hover:text-heading dark:hover:text-white font-medium flex items-center gap-1 transition-colors"
+          title={t('nav.pause_all', currentLang)}
+        >
+          <Pause class="w-3.5 h-3.5 text-amber-500" />
+          <span class="hidden md:inline">{t('nav.pause_all', currentLang)}</span>
+        </button>
 
-        <!-- Autostart Status Pill -->
-        <div class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark text-[11px] font-semibold text-subtle dark:text-zinc-400">
-          <Power class="w-3 h-3 {settings.autostart ? 'text-primary' : 'text-zinc-400'}" />
-          <span>{settings.autostart ? t('header.autostart_on', currentLang) : t('header.autostart_off', currentLang)}</span>
-        </div>
+        <!-- Resume All -->
+        <button
+          type="button"
+          onclick={handleResumeAll}
+          class="px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-300 hover:text-heading dark:hover:text-white font-medium flex items-center gap-1 transition-colors"
+          title={t('nav.resume_all', currentLang)}
+        >
+          <Play class="w-3.5 h-3.5 text-primary dark:text-indigo-400" />
+          <span class="hidden md:inline">{t('nav.resume_all', currentLang)}</span>
+        </button>
+
+        <!-- Clear Completed -->
+        <button
+          type="button"
+          onclick={handleClearCompleted}
+          class="px-2 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-subtle dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium flex items-center gap-1 transition-colors"
+          title={t('nav.clear_completed', currentLang)}
+        >
+          <Trash2 class="w-3.5 h-3.5" />
+          <span class="hidden lg:inline">{t('nav.clear_completed', currentLang)}</span>
+        </button>
       </div>
     </div>
 
-    <!-- Right: Header Controls, Throttler, Language, Theme, & Action Buttons -->
-    <div class="flex items-center gap-2 sm:gap-2.5">
-      <!-- Speed Limiter Quick Dropdown -->
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-elevated dark:bg-surface-darkelevated border border-border-light dark:border-border-dark text-xs">
-        <Wifi class="w-3.5 h-3.5 text-secondary" />
-        <span class="text-subtle dark:text-zinc-400 font-semibold hidden lg:inline">{t('nav.throttler', currentLang)}</span>
+    <!-- Center: Universal Search & Filter Input -->
+    <div class="relative w-48 sm:w-64 md:w-80 mx-2">
+      <Search class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-subtle dark:text-zinc-500" />
+      <input
+        type="text"
+        placeholder={t('cat.filter_placeholder', currentLang)}
+        bind:value={searchQuery}
+        class="w-full pl-8 pr-3 py-1 bg-surface-elevated dark:bg-surface-darkcard rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-heading dark:text-white placeholder-subtle dark:placeholder-zinc-500 text-xs transition-all"
+      />
+      {#if searchQuery}
+        <button
+          type="button"
+          onclick={() => (searchQuery = '')}
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white"
+        >
+          ×
+        </button>
+      {/if}
+    </div>
+
+    <!-- Right: Throttler, Theme, Lang, Scheduler, Settings -->
+    <div class="flex items-center gap-1.5">
+      <!-- Speed Throttler Dropdown -->
+      <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated border border-border-light dark:border-border-dark">
+        <Wifi class="w-3 h-3 text-secondary" />
         <select
           value={settings.speed_limit_kb}
           onchange={(e) => handleSpeedLimitChange(Number((e.target as HTMLSelectElement).value))}
-          class="bg-transparent font-mono font-bold text-heading dark:text-white focus:outline-none cursor-pointer text-xs"
+          class="bg-transparent font-mono font-bold text-heading dark:text-white focus:outline-none cursor-pointer text-[11px]"
         >
           <option value={0} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">{t('nav.unlimited', currentLang)}</option>
           <option value={1024} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">1 MB/s</option>
@@ -606,29 +1015,42 @@
         </select>
       </div>
 
-      <!-- Language Selector Popover Menu -->
+      <!-- Schedule Modal Button -->
+      <button
+        type="button"
+        onclick={() => (isSchedulerModalOpen = true)}
+        class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-300 hover:text-heading dark:hover:text-white transition-colors relative"
+        title={t('nav.schedule', currentLang)}
+      >
+        <Calendar class="w-4 h-4 text-secondary" />
+        {#if scheduledTasks.length > 0}
+          <span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-secondary"></span>
+        {/if}
+      </button>
+
+      <!-- Language Selector -->
       <div class="relative">
         <button
           id="lang-dropdown-btn"
           type="button"
           onclick={() => (isLangMenuOpen = !isLangMenuOpen)}
-          class="px-2.5 py-1.5 rounded-xl bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-heading dark:text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+          class="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-300 hover:text-heading dark:hover:text-white font-mono font-bold uppercase transition-colors flex items-center gap-1 text-[11px]"
           title={t('header.select_language', currentLang)}
         >
           <Globe class="w-3.5 h-3.5 text-primary dark:text-indigo-400" />
-          <span class="uppercase font-mono font-bold">{currentLang}</span>
+          <span>{currentLang}</span>
         </button>
 
         {#if isLangMenuOpen}
           <div
             id="lang-dropdown-menu"
-            class="absolute right-0 mt-2 w-44 bg-surface dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150"
+            class="absolute right-0 mt-1.5 w-44 bg-surface dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-2xl p-1 z-50 animate-in fade-in zoom-in-95 duration-150"
           >
             {#each SUPPORTED_LANGUAGES as langOpt}
               <button
                 type="button"
                 onclick={() => handleSelectLanguage(langOpt.code)}
-                class="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all {currentLang === langOpt.code ? 'bg-primary text-white' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800 text-body dark:text-zinc-300'}"
+                class="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {currentLang === langOpt.code ? 'bg-primary text-white font-semibold' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800 text-body dark:text-zinc-300'}"
               >
                 <div class="flex items-center gap-2">
                   <span>{langOpt.flag}</span>
@@ -647,7 +1069,7 @@
       <button
         type="button"
         onclick={toggleThemeMode}
-        class="p-2 rounded-xl bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-all shadow-sm"
+        class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-colors"
         title={`${t('header.theme_toggle', currentLang)}: ${currentTheme}`}
       >
         {#if currentTheme === 'dark'}
@@ -659,203 +1081,613 @@
         {/if}
       </button>
 
-      <!-- Schedule Modal Button -->
-      <button
-        type="button"
-        onclick={() => (isSchedulerModalOpen = true)}
-        class="px-3 py-1.5 rounded-xl bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-heading dark:text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
-        title={t('nav.schedule', currentLang)}
-      >
-        <Calendar class="w-3.5 h-3.5 text-secondary" />
-        <span class="hidden sm:inline">{t('nav.schedule', currentLang)}</span>
-        {#if scheduledTasks.length > 0}
-          <span class="px-1.5 py-0.2 bg-secondary/15 dark:bg-secondary/25 text-secondary text-[10px] rounded-full font-mono font-bold">
-            {scheduledTasks.length}
-          </span>
-        {/if}
-      </button>
-
       <!-- Settings Modal Button -->
       <button
         type="button"
         onclick={() => (isSettingsModalOpen = true)}
-        class="p-2 rounded-xl bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-all shadow-sm"
+        class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-colors"
         title={t('nav.settings', currentLang)}
       >
-        <Settings class="w-4 h-4" />
-      </button>
-
-      <!-- New Download Primary Action Button -->
-      <button
-        type="button"
-        onclick={() => (isAddModalOpen = true)}
-        class="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]"
-      >
-        <Plus class="w-4 h-4 stroke-[2.5]" />
-        <span class="hidden sm:inline">{t('nav.new_download', currentLang)}</span>
+        <SettingsIcon class="w-4 h-4" />
       </button>
     </div>
   </header>
 
-  <!-- Main Bento Grid Workspace Layout -->
-  <main class="flex-1 p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 overflow-hidden">
-    <!-- Left Column: Task Queue with modern category chips, search bar, & bulk actions (7 cols) -->
-    <section class="lg:col-span-7 flex flex-col h-full overflow-hidden min-h-0">
-      <TaskQueue
-        {tasks}
-        {selectedTaskId}
-        {currentLang}
-        onSelectTask={(id) => (selectedTaskId = id)}
-        onPause={handlePause}
-        onResume={handleResume}
-        onCancel={handleCancel}
-        onPauseAll={handlePauseAll}
-        onResumeAll={handleResumeAll}
-        onClearCompleted={handleClearCompleted}
-      />
-    </section>
-
-    <!-- Right Column: Live Speedometer, Segment Inspector, & Task Details Card (5 cols) -->
-    <section class="lg:col-span-5 flex flex-col gap-4 overflow-y-auto pr-1 min-h-0">
-      <!-- 1. Live Speedometer with Smooth Bezier Gradient Chart -->
-      <Speedometer currentSpeedBytes={liveSpeedBytes} {currentLang} />
-
-      <!-- 2. Active Task Details & Segment Inspector Card -->
-      {#if selectedTask}
-        <div class="bg-surface dark:bg-surface-dark rounded-2xl border border-border-light dark:border-border-dark p-4 sm:p-5 shadow-ambient flex flex-col gap-3">
-          <!-- Top Header Info -->
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold uppercase tracking-wider text-subtle dark:text-zinc-400">
-              {t('inspect.title', currentLang)}
-            </span>
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary dark:text-indigo-400 border border-primary/20">
-                {selectedTask.status}
-              </span>
+  <!-- Fluid Main Content Area (Sidebar + Center Table) -->
+  <div class="flex-1 flex overflow-hidden min-h-0">
+    <!-- Left Collapsible / Compact Sidebar -->
+    <aside
+      class="border-r border-border-light dark:border-border-dark bg-surface dark:bg-surface-dark flex flex-col justify-between transition-all duration-200 shrink-0 z-20 {isSidebarCollapsed ? 'w-14' : 'w-52 md:w-60'}"
+    >
+      <!-- Top Navigation Tree -->
+      <div class="p-2 space-y-4 overflow-y-auto">
+        <!-- Status Filter Group -->
+        <div>
+          {#if !isSidebarCollapsed}
+            <div class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-subtle dark:text-zinc-500">
+              {t('sidebar.navigation', currentLang)}
             </div>
-          </div>
-
-          <!-- File Info Card -->
-          <div class="p-3.5 rounded-xl bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark space-y-2">
-            <div>
-              <div class="text-[11px] font-bold text-subtle dark:text-zinc-400 uppercase tracking-wide">{t('inspect.filename', currentLang)}</div>
-              <h3 class="text-sm font-extrabold text-heading dark:text-white truncate font-sans" title={selectedTask.filename}>
-                {selectedTask.filename}
-              </h3>
-            </div>
-
-            <div>
-              <div class="text-[11px] font-bold text-subtle dark:text-zinc-400 uppercase tracking-wide">{t('inspect.url', currentLang)}</div>
-              <div class="flex items-center gap-1.5">
-                <span class="text-xs text-subtle dark:text-zinc-400 font-mono truncate flex-1" title={selectedTask.url}>
-                  {selectedTask.url}
-                </span>
-                <button
-                  type="button"
-                  onclick={copySelectedUrl}
-                  class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-colors"
-                  title={t('inspect.copy_url', currentLang)}
-                >
-                  {#if copiedToast}
-                    <Check class="w-3.5 h-3.5 text-emerald-500" />
-                  {:else}
-                    <Copy class="w-3.5 h-3.5" />
-                  {/if}
-                </button>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 pt-1 text-xs font-mono">
-              <div class="p-2 rounded-lg bg-surface dark:bg-surface-darkelevated border border-border-light dark:border-border-dark">
-                <span class="text-[10px] text-subtle dark:text-zinc-400 block">{t('inspect.file_size', currentLang)}</span>
-                <strong class="text-heading dark:text-zinc-200">{formatBytes(selectedTask.total_size)}</strong>
-              </div>
-              <div class="p-2 rounded-lg bg-surface dark:bg-surface-darkelevated border border-border-light dark:border-border-dark">
-                <span class="text-[10px] text-subtle dark:text-zinc-400 block">{t('inspect.downloaded', currentLang)}</span>
-                <strong class="text-primary dark:text-indigo-400">{formatBytes(selectedTask.downloaded_size)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <!-- Multi-Connection Segment Inspector -->
-          <SegmentInspector
-            segments={selectedSegments}
-            segmentsCount={selectedTask.segments_count}
-            progressPercent={progressPercent}
-            {currentLang}
-            isDownloading={selectedTask.status === 'Downloading'}
-          />
-
-          <!-- Quick Action Buttons -->
-          <div class="flex items-center justify-between gap-2 pt-1">
-            <div class="flex items-center gap-2">
-              {#if selectedTask.status === 'Downloading'}
-                <button
-                  type="button"
-                  onclick={() => handlePause(selectedTask!.id)}
-                  class="px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-bold text-heading dark:text-white flex items-center gap-1.5 transition-all"
-                >
-                  <Pause class="w-3.5 h-3.5 text-amber-500" /> {t('inspect.pause', currentLang)}
-                </button>
-              {:else if selectedTask.status === 'Paused' || selectedTask.status === 'Failed' || selectedTask.status === 'Queued'}
-                <button
-                  type="button"
-                  onclick={() => handleResume(selectedTask!.id)}
-                  class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white flex items-center gap-1.5 shadow-sm shadow-primary/20 transition-all"
-                >
-                  <Play class="w-3.5 h-3.5" /> {t('inspect.resume', currentLang)}
-                </button>
-              {/if}
-
-              <button
-                type="button"
-                onclick={() => invokeCommand('open_progress_window', { taskId: selectedTask!.id, task_id: selectedTask!.id })}
-                class="px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-bold text-subtle dark:text-zinc-300 hover:text-heading dark:hover:text-white flex items-center gap-1.5 transition-all"
-                title="Pop out download dialog window"
-              >
-                <ExternalLink class="w-3.5 h-3.5 text-primary" /> Pop out
-              </button>
-            </div>
-
+          {/if}
+          <div class="space-y-0.5 mt-0.5">
+            <!-- All Downloads -->
             <button
               type="button"
-              onclick={() => handleCancel(selectedTask!.id)}
-              class="px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-subtle dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 flex items-center gap-1.5 transition-all"
+              onclick={() => { activeNavFilter = 'all'; activeCategory = 'all'; }}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeNavFilter === 'all' && activeCategory === 'all' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('sidebar.all_tasks', currentLang)}
             >
-              <Trash2 class="w-3.5 h-3.5" /> {t('inspect.cancel', currentLang)}
+              <Download class="w-3.5 h-3.5 shrink-0" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('sidebar.all_tasks', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeNavFilter === 'all' && activeCategory === 'all' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {statusCounts.all}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Downloading Active -->
+            <button
+              type="button"
+              onclick={() => (activeNavFilter = 'downloading')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeNavFilter === 'downloading' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('status.downloading', currentLang)}
+            >
+              <Activity class="w-3.5 h-3.5 shrink-0 text-primary dark:text-indigo-400" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('status.downloading', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeNavFilter === 'downloading' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {statusCounts.downloading}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Completed -->
+            <button
+              type="button"
+              onclick={() => (activeNavFilter = 'completed')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeNavFilter === 'completed' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('status.completed', currentLang)}
+            >
+              <CheckCircle2 class="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('status.completed', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeNavFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {statusCounts.completed}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Paused -->
+            <button
+              type="button"
+              onclick={() => (activeNavFilter = 'paused')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeNavFilter === 'paused' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('status.paused', currentLang)}
+            >
+              <Pause class="w-3.5 h-3.5 shrink-0 text-amber-500" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('status.paused', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeNavFilter === 'paused' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {statusCounts.paused}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Queued -->
+            <button
+              type="button"
+              onclick={() => (activeNavFilter = 'queued')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeNavFilter === 'queued' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('status.queued', currentLang)}
+            >
+              <Clock class="w-3.5 h-3.5 shrink-0 text-cyan-500" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('status.queued', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeNavFilter === 'queued' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {statusCounts.queued}
+                </span>
+              {/if}
             </button>
           </div>
         </div>
-      {:else}
-        <div class="bg-surface dark:bg-surface-dark rounded-2xl border border-border-light dark:border-border-dark p-8 text-center text-subtle dark:text-zinc-400 shadow-ambient flex flex-col items-center justify-center">
-          <div class="w-12 h-12 rounded-2xl bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark flex items-center justify-center mb-3">
-            <Layers class="w-6 h-6 text-subtle dark:text-zinc-500" />
-          </div>
-          <h4 class="text-sm font-bold text-heading dark:text-white">{t('inspect.empty_title', currentLang)}</h4>
-          <p class="text-xs text-subtle dark:text-zinc-400 mt-1 max-w-xs">{t('inspect.empty_sub', currentLang)}</p>
-        </div>
-      {/if}
 
-      <!-- 3. Engine Architecture & Storage Specs Banner -->
-      <div class="bg-surface-elevated dark:bg-surface-darkcard rounded-2xl border border-border-light dark:border-border-dark p-4 flex items-center justify-between text-xs">
-        <div class="flex items-center gap-2.5">
-          <div class="w-7 h-7 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center text-primary dark:text-indigo-400">
-            <Cpu class="w-4 h-4" />
+        <!-- Categories Section -->
+        <div>
+          {#if !isSidebarCollapsed}
+            <div class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-subtle dark:text-zinc-500">
+              {t('sidebar.categories', currentLang)}
+            </div>
+          {/if}
+          <div class="space-y-0.5 mt-0.5">
+            <!-- Videos -->
+            <button
+              type="button"
+              onclick={() => (activeCategory = 'video')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeCategory === 'video' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('cat.video', currentLang)}
+            >
+              <Video class="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('cat.video', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeCategory === 'video' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {categoryCounts.video}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Audio -->
+            <button
+              type="button"
+              onclick={() => (activeCategory = 'audio')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeCategory === 'audio' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('cat.audio', currentLang)}
+            >
+              <Music class="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('cat.audio', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeCategory === 'audio' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {categoryCounts.audio}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Compressed / Archives -->
+            <button
+              type="button"
+              onclick={() => (activeCategory = 'archives')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeCategory === 'archives' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('cat.archives', currentLang)}
+            >
+              <Archive class="w-3.5 h-3.5 shrink-0 text-amber-400" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('cat.archives', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeCategory === 'archives' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {categoryCounts.archives}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Documents -->
+            <button
+              type="button"
+              onclick={() => (activeCategory = 'documents')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeCategory === 'documents' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('cat.documents', currentLang)}
+            >
+              <FileText class="w-3.5 h-3.5 shrink-0 text-indigo-400" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('cat.documents', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeCategory === 'documents' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {categoryCounts.documents}
+                </span>
+              {/if}
+            </button>
+
+            <!-- Programs -->
+            <button
+              type="button"
+              onclick={() => (activeCategory = 'programs')}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors {activeCategory === 'programs' ? 'bg-primary text-white font-bold shadow-sm' : 'hover:bg-surface-elevated dark:hover:bg-zinc-800/60 text-body dark:text-zinc-300'}"
+              title={t('cat.programs', currentLang)}
+            >
+              <AppWindow class="w-3.5 h-3.5 shrink-0 text-violet-400" />
+              {#if !isSidebarCollapsed}
+                <span class="truncate flex-1 text-left">{t('cat.programs', currentLang)}</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono {activeCategory === 'programs' ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-subtle dark:text-zinc-400'}">
+                  {categoryCounts.programs}
+                </span>
+              {/if}
+            </button>
           </div>
-          <div>
-            <div class="font-bold text-heading dark:text-white">{t('inspect.engine_info', currentLang)}</div>
-            <div class="text-[11px] text-subtle dark:text-zinc-400 flex items-center gap-1">
-              <ShieldCheck class="w-3 h-3 text-secondary" />
-              <span>TLS / HTTP Range & Multi-Connection Slicing</span>
+        </div>
+      </div>
+
+      <!-- Bottom Sidebar Info -->
+      {#if !isSidebarCollapsed}
+        <div class="p-3 border-t border-border-light dark:border-border-dark bg-surface-elevated/50 dark:bg-surface-darkcard/50 text-[11px] text-subtle dark:text-zinc-400">
+          <div class="flex items-center gap-2">
+            <HardDrive class="w-3.5 h-3.5 text-primary shrink-0" />
+            <div class="truncate">
+              <span class="font-bold block text-heading dark:text-white truncate">{settings.download_dir}</span>
             </div>
           </div>
         </div>
-        <div class="text-right font-mono text-[11px] text-subtle dark:text-zinc-400">
-          <span class="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold">WAL SQLite</span>
+      {/if}
+    </aside>
+
+    <!-- Main Center Area: High-Density Download Table Queue -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-canvas dark:bg-canvas-dark">
+      <!-- Multi-Select Bulk Action Header (Appears when items are selected) -->
+      {#if selectedTaskIds.size > 0}
+        <div class="px-4 py-2 bg-primary/10 dark:bg-primary/20 border-b border-primary/20 flex items-center justify-between animate-in fade-in duration-100">
+          <div class="flex items-center gap-2 font-semibold text-primary dark:text-indigo-300">
+            <span class="px-2 py-0.5 bg-primary text-white rounded font-mono font-bold text-xs">
+              {selectedTaskIds.size}
+            </span>
+            <span>{t('actions.selected_count', currentLang)}</span>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              onclick={handlePauseSelected}
+              class="px-2.5 py-1 bg-surface dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium rounded-lg flex items-center gap-1 shadow-sm"
+            >
+              <Pause class="w-3 h-3 text-amber-500" /> {t('actions.pause_selected', currentLang)}
+            </button>
+            <button
+              type="button"
+              onclick={handleResumeSelected}
+              class="px-2.5 py-1 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg flex items-center gap-1 shadow-sm"
+            >
+              <Play class="w-3 h-3" /> {t('actions.resume_selected', currentLang)}
+            </button>
+            <button
+              type="button"
+              onclick={handleDeleteSelected}
+              class="px-2.5 py-1 bg-surface dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium rounded-lg flex items-center gap-1 shadow-sm"
+            >
+              <Trash2 class="w-3 h-3" /> {t('actions.delete_selected', currentLang)}
+            </button>
+          </div>
         </div>
+      {/if}
+
+      <!-- Main Download Data Table -->
+      <div class="flex-1 overflow-x-auto overflow-y-auto">
+        <table class="w-full text-left border-collapse min-w-[780px]">
+          <!-- Table Header -->
+          <thead class="sticky top-0 z-10 bg-surface-elevated dark:bg-surface-darkelevated border-b border-border-light dark:border-border-dark text-[11px] font-bold text-subtle dark:text-zinc-400 uppercase tracking-wider">
+            <tr>
+              <!-- Checkbox column -->
+              <th class="w-10 px-3 py-2 text-center">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onchange={toggleSelectAll}
+                  class="rounded accent-primary cursor-pointer"
+                  title={t('actions.select_all', currentLang)}
+                />
+              </th>
+
+              <!-- File Name -->
+              <th
+                class="px-3 py-2 cursor-pointer hover:text-heading dark:hover:text-white transition-colors"
+                onclick={() => handleSort('filename')}
+              >
+                <div class="flex items-center gap-1">
+                  <span>{t('table.filename', currentLang)}</span>
+                  {#if sortField === 'filename'}
+                    <span class="text-primary font-mono">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  {/if}
+                </div>
+              </th>
+
+              <!-- Size -->
+              <th
+                class="w-24 px-3 py-2 cursor-pointer hover:text-heading dark:hover:text-white transition-colors text-right"
+                onclick={() => handleSort('total_size')}
+              >
+                <div class="flex items-center justify-end gap-1">
+                  <span>{t('table.size', currentLang)}</span>
+                  {#if sortField === 'total_size'}
+                    <span class="text-primary font-mono">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  {/if}
+                </div>
+              </th>
+
+              <!-- Progress Bar -->
+              <th class="w-44 px-3 py-2">
+                <span>{t('table.progress', currentLang)}</span>
+              </th>
+
+              <!-- Transfer Speed -->
+              <th class="w-28 px-3 py-2 text-right">
+                <span>{t('table.speed', currentLang)}</span>
+              </th>
+
+              <!-- Status -->
+              <th
+                class="w-28 px-3 py-2 cursor-pointer hover:text-heading dark:hover:text-white transition-colors"
+                onclick={() => handleSort('status')}
+              >
+                <div class="flex items-center gap-1">
+                  <span>{t('table.status', currentLang)}</span>
+                  {#if sortField === 'status'}
+                    <span class="text-primary font-mono">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  {/if}
+                </div>
+              </th>
+
+              <!-- ETA -->
+              <th class="w-20 px-3 py-2 text-right">
+                <span>{t('table.eta', currentLang)}</span>
+              </th>
+
+              <!-- Added Date -->
+              <th
+                class="w-32 px-3 py-2 cursor-pointer hover:text-heading dark:hover:text-white transition-colors"
+                onclick={() => handleSort('created_at')}
+              >
+                <div class="flex items-center gap-1">
+                  <span>{t('table.added', currentLang)}</span>
+                  {#if sortField === 'created_at'}
+                    <span class="text-primary font-mono">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  {/if}
+                </div>
+              </th>
+
+              <!-- Actions -->
+              <th class="w-28 px-3 py-2 text-center">
+                <span>{t('table.actions', currentLang)}</span>
+              </th>
+            </tr>
+          </thead>
+
+          <!-- Table Body -->
+          <tbody class="divide-y divide-border-light dark:divide-border-dark font-sans text-xs">
+            {#if filteredTasks.length === 0}
+              <tr>
+                <td colspan="9" class="py-20 text-center text-subtle dark:text-zinc-500">
+                  <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
+                    <div class="w-12 h-12 rounded-2xl bg-surface-elevated dark:bg-surface-darkcard border border-border-light dark:border-border-dark flex items-center justify-center mb-3 text-subtle dark:text-zinc-500">
+                      <Download class="w-6 h-6" />
+                    </div>
+                    <p class="font-bold text-sm text-heading dark:text-white">{t('cat.empty_title', currentLang)}</p>
+                    <p class="text-xs text-subtle dark:text-zinc-400 mt-1 mb-4">{t('cat.empty_sub', currentLang)}</p>
+                    <button
+                      type="button"
+                      onclick={() => (isAddModalOpen = true)}
+                      class="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow-sm flex items-center gap-1.5"
+                    >
+                      <Plus class="w-4 h-4" />
+                      <span>{t('cat.empty_cta', currentLang)}</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {:else}
+              {#each filteredTasks as task (task.id)}
+                {@const isSelected = selectedTaskIds.has(task.id)}
+                {@const isFocused = focusedTaskId === task.id}
+                {@const badge = getStatusBadge(task.status)}
+                {@const cat = getFileCategory(task.filename)}
+                {@const CatIcon = getCategoryIcon(cat)}
+                {@const speed = taskSpeedMap[task.id] || 0}
+                {@const pct = task.total_size && task.total_size > 0
+                  ? Math.min(100, (task.downloaded_size / task.total_size) * 100)
+                  : (task.status === 'Completed' ? 100 : 0)}
+
+                <tr
+                  class="group cursor-pointer transition-colors duration-100 select-none {isSelected ? 'bg-primary/10 dark:bg-indigo-950/40 text-heading dark:text-white' : 'hover:bg-slate-50 dark:hover:bg-zinc-800/40 text-body dark:text-zinc-300'}"
+                  onclick={(e) => handleRowClick(e, task.id)}
+                  oncontextmenu={(e) => handleContextMenu(e, task.id)}
+                  ondblclick={() => openProgressPopout(task.id)}
+                >
+                  <!-- Selection Checkbox -->
+                  <td class="px-3 py-2 text-center" onclick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onchange={() => {
+                        const next = new Set(selectedTaskIds);
+                        if (next.has(task.id)) next.delete(task.id);
+                        else next.add(task.id);
+                        selectedTaskIds = next;
+                        focusedTaskId = task.id;
+                      }}
+                      class="rounded accent-primary cursor-pointer"
+                    />
+                  </td>
+
+                  <!-- File Name & Category Icon -->
+                  <td class="px-3 py-2 min-w-[200px] max-w-[320px]">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 {isSelected ? 'bg-primary text-white' : 'bg-surface-elevated dark:bg-surface-darkcard text-subtle dark:text-zinc-400 border border-border-light dark:border-border-dark'}">
+                        <CatIcon class="w-3.5 h-3.5" />
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <div class="font-bold text-heading dark:text-white truncate" title={task.filename}>
+                          {task.filename}
+                        </div>
+                        <div class="text-[10px] font-mono text-subtle dark:text-zinc-500 truncate" title={task.url}>
+                          {task.url}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Size -->
+                  <td class="px-3 py-2 text-right font-mono text-[11px] whitespace-nowrap">
+                    <span class="font-bold text-heading dark:text-zinc-200">{formatBytes(task.total_size)}</span>
+                  </td>
+
+                  <!-- Progress Bar & Percentage -->
+                  <td class="px-3 py-2">
+                    <div class="space-y-1">
+                      <div class="flex items-center justify-between font-mono text-[10px]">
+                        <span class="text-subtle dark:text-zinc-400">{formatBytes(task.downloaded_size)}</span>
+                        <span class="font-bold text-heading dark:text-zinc-200">{pct.toFixed(1)}%</span>
+                      </div>
+                      <div class="w-full bg-slate-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          class="h-full rounded-full transition-all duration-300 {task.status === 'Completed' ? 'bg-emerald-500' : 'bg-gradient-to-r from-primary to-secondary'}"
+                          style="width: {pct}%"
+                        ></div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Transfer Speed -->
+                  <td class="px-3 py-2 text-right font-mono text-[11px] whitespace-nowrap">
+                    {#if task.status === 'Downloading'}
+                      <span class="font-extrabold text-secondary">{formatSpeed(speed)}</span>
+                    {:else}
+                      <span class="text-subtle dark:text-zinc-500">-</span>
+                    {/if}
+                  </td>
+
+                  <!-- Status Badge -->
+                  <td class="px-3 py-2 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border {badge.bg}">
+                      <span class="w-1.5 h-1.5 rounded-full {badge.dot}"></span>
+                      <span>{badge.label}</span>
+                    </span>
+                  </td>
+
+                  <!-- ETA -->
+                  <td class="px-3 py-2 text-right font-mono text-[11px] text-subtle dark:text-zinc-400 whitespace-nowrap">
+                    {formatEta(task, speed)}
+                  </td>
+
+                  <!-- Added Date -->
+                  <td class="px-3 py-2 font-mono text-[11px] text-subtle dark:text-zinc-400 whitespace-nowrap">
+                    {formatDate(task.created_at)}
+                  </td>
+
+                  <!-- Row Actions -->
+                  <td class="px-3 py-2 text-center whitespace-nowrap" onclick={(e) => e.stopPropagation()}>
+                    <div class="flex items-center justify-center gap-1">
+                      {#if task.status === 'Downloading'}
+                        <button
+                          type="button"
+                          onclick={() => handlePause(task.id)}
+                          class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-subtle dark:text-zinc-300 hover:text-amber-500 transition-colors"
+                          title={t('inspect.pause', currentLang)}
+                        >
+                          <Pause class="w-3.5 h-3.5" />
+                        </button>
+                      {:else if task.status === 'Paused' || task.status === 'Queued' || task.status === 'Failed'}
+                        <button
+                          type="button"
+                          onclick={() => handleResume(task.id)}
+                          class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-primary dark:text-indigo-400 transition-colors"
+                          title={t('inspect.resume', currentLang)}
+                        >
+                          <Play class="w-3.5 h-3.5" />
+                        </button>
+                      {/if}
+
+                      <button
+                        type="button"
+                        onclick={() => openProgressPopout(task.id)}
+                        class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-subtle dark:text-zinc-400 hover:text-primary transition-colors"
+                        title={t('ctx.popout', currentLang)}
+                      >
+                        <ExternalLink class="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onclick={() => handleDelete(task.id)}
+                        class="p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-950/50 text-subtle dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                        title={t('ctx.delete', currentLang)}
+                      >
+                        <Trash2 class="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            {/if}
+          </tbody>
+        </table>
       </div>
-    </section>
-  </main>
+
+      <!-- Right-Click Context Menu -->
+      {#if contextMenu.visible && contextMenu.taskId}
+        {@const ctxTask = tasks.find((t) => t.id === contextMenu.taskId)}
+        {#if ctxTask}
+          <div
+            id="context-menu-container"
+            class="fixed z-50 w-52 bg-surface dark:bg-surface-darkcard rounded-xl border border-border-light dark:border-border-dark shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-100 text-xs"
+            style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+          >
+            {#if ctxTask.status === 'Downloading'}
+              <button
+                type="button"
+                onclick={() => { handlePause(ctxTask.id); closeContextMenu(); }}
+                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium text-left"
+              >
+                <Pause class="w-3.5 h-3.5 text-amber-500" />
+                <span>{t('ctx.pause', currentLang)}</span>
+              </button>
+            {:else}
+              <button
+                type="button"
+                onclick={() => { handleResume(ctxTask.id); closeContextMenu(); }}
+                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium text-left"
+              >
+                <Play class="w-3.5 h-3.5 text-primary" />
+                <span>{t('ctx.resume', currentLang)}</span>
+              </button>
+            {/if}
+
+            <button
+              type="button"
+              onclick={() => { openProgressPopout(ctxTask.id); closeContextMenu(); }}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium text-left"
+            >
+              <ExternalLink class="w-3.5 h-3.5 text-secondary" />
+              <span>{t('ctx.popout', currentLang)}</span>
+            </button>
+
+            <button
+              type="button"
+              onclick={() => { openContainingFolder(ctxTask.save_path); closeContextMenu(); }}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium text-left"
+            >
+              <FolderOpen class="w-3.5 h-3.5 text-indigo-400" />
+              <span>{t('ctx.open_folder', currentLang)}</span>
+            </button>
+
+            <button
+              type="button"
+              onclick={() => { copyUrl(ctxTask.url); closeContextMenu(); }}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-heading dark:text-white font-medium text-left"
+            >
+              <Copy class="w-3.5 h-3.5 text-cyan-400" />
+              <span>{t('ctx.copy_url', currentLang)}</span>
+            </button>
+
+            <div class="my-1 border-t border-border-light dark:border-border-dark"></div>
+
+            <button
+              type="button"
+              onclick={() => { handleDelete(ctxTask.id); closeContextMenu(); }}
+              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium text-left"
+            >
+              <Trash2 class="w-3.5 h-3.5" />
+              <span>{t('ctx.delete', currentLang)}</span>
+            </button>
+          </div>
+        {/if}
+      {/if}
+    </main>
+  </div>
+
+  <!-- Bottom App Status Bar -->
+  <footer class="h-7 bg-surface dark:bg-surface-dark border-t border-border-light dark:border-border-dark flex items-center justify-between px-3 text-[11px] text-subtle dark:text-zinc-400 shrink-0 font-mono">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="font-sans font-semibold text-heading dark:text-zinc-300">{t('footer.engine_status', currentLang)}</span>
+      </div>
+      <span>•</span>
+      <span>{tasks.length} {t('footer.total_tasks', currentLang)}</span>
+      <span>•</span>
+      <span>{totalActiveDownloads} {t('footer.active', currentLang)}</span>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1">
+        <span>{t('footer.total_speed', currentLang)}:</span>
+        <strong class="text-secondary font-bold font-mono">{formatSpeed(totalLiveSpeed)}</strong>
+      </div>
+      <span>•</span>
+      <span class="text-primary font-bold">WAL SQLite</span>
+    </div>
+  </footer>
 
   <!-- Add Download Modal Dialog -->
   <AddDownloadModal
