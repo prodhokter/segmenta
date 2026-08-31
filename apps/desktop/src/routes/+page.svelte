@@ -24,14 +24,13 @@
   // Tauri invoke helper with safe browser fallback
   async function invokeCommand<T>(cmd: string, args: Record<string, any> = {}): Promise<T> {
     try {
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      if (typeof window !== 'undefined' && ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) {
         const { invoke } = await import('@tauri-apps/api/core');
         return await invoke<T>(cmd, args);
       }
     } catch (e) {
       console.warn(`[Tauri Invoke Fallback] ${cmd}:`, e);
     }
-    // Browser mock fallback if running outside Tauri
     return mockInvoke<T>(cmd, args);
   }
 
