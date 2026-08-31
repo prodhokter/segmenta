@@ -58,7 +58,7 @@
     auto_categorize: true,
   });
 
-  // Mock store for web preview
+  // Mock store for web preview & demo simulation
   let mockTasksStore: TaskRecord[] = [
     {
       id: 'task-demo-1',
@@ -179,42 +179,87 @@
     return undefined as unknown as T;
   }
 
+  function applyTheme(themeName: string) {
+    if (typeof document === 'undefined') return;
+    const isDark =
+      themeName === 'dark' ||
+      (themeName === 'system' &&
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    document.documentElement.classList.toggle('dark', isDark);
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('segmenta_theme', themeName);
+      }
+    } catch {
+      // ignore storage access errors
+    }
+  }
+
   async function loadInitialSettings() {
+    let savedTheme: string | null = null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        savedTheme = localStorage.getItem('segmenta_theme');
+      }
+    } catch {
+      // ignore
+    }
+
     try {
       const s = await invokeCommand<AppSettings>('get_settings');
       if (s) {
+        if (savedTheme) {
+          s.theme = savedTheme;
+        }
         settings = s;
         applyTheme(s.theme);
+        return;
       }
     } catch (e) {
       console.warn('Load settings error:', e);
     }
-  }
 
-  function applyTheme(themeName: string) {
-    if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    if (themeName === 'dark') {
-      root.classList.add('dark');
-    } else if (themeName === 'light') {
-      root.classList.remove('dark');
+    if (savedTheme) {
+      settings.theme = savedTheme;
+      applyTheme(savedTheme);
     } else {
-      // system
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
+      applyTheme(settings.theme);
     }
   }
 
   async function refreshTasks() {
     try {
+      // Advance simulated mock downloads if not on Tauri
+      const isTauri = typeof window !== 'undefined' && ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+      if (!isTauri) {
+        mockTasksStore.forEach((t) => {
+          if (t.status === 'Downloading') {
+            const step = Math.floor(2.2 * 1024 * 1024 + Math.random() * 512 * 1024);
+            if (t.total_size && t.total_size > 0) {
+              t.downloaded_size = Math.min(t.total_size, t.downloaded_size + step);
+              if (t.downloaded_size >= t.total_size) {
+                t.status = 'Completed';
+                t.finished_at = new Date().toISOString();
+              }
+            } else {
+              t.downloaded_size += step;
+            }
+            t.updated_at = new Date().toISOString();
+          }
+        });
+      }
+
       const list = await invokeCommand<TaskRecord[]>('list_tasks');
       if (list) {
         tasks = list;
         if (!selectedTaskId && tasks.length > 0) {
           selectedTaskId = tasks[0].id;
+        } else if (selectedTaskId && !tasks.some((t) => t.id === selectedTaskId)) {
+          selectedTaskId = tasks.length > 0 ? tasks[0].id : null;
         }
       }
 
@@ -224,16 +269,22 @@
       }
 
       // Calculate live throughput
-      const downloadingCount = tasks.filter((t) => t.status === 'Downloading').length;
-      if (downloadingCount > 0) {
-        liveSpeedBytes = Math.floor(18 * 1024 * 1024 + (Math.random() * 4 - 2) * 1024 * 1024);
+      const downloadingTasks = tasks.filter((t) => t.status === 'Downloading');
+      if (downloadingTasks.length > 0) {
+        const baseSpeed = downloadingTasks.length * 12 * 1024 * 1024;
+        const jitter = (Math.random() * 3 - 1.5) * 1024 * 1024;
+        liveSpeedBytes = Math.max(1024 * 1024, Math.floor(baseSpeed + jitter));
       } else {
         liveSpeedBytes = 0;
       }
 
       if (selectedTaskId) {
         const segs = await invokeCommand<SegmentRecord[]>('get_segments', { taskId: selectedTaskId });
-        if (segs) selectedSegments = segs;
+        if (segs && segs.length > 0) {
+          selectedSegments = segs;
+        } else {
+          selectedSegments = [];
+        }
       }
     } catch (e) {
       console.error('Refresh error:', e);
@@ -244,19 +295,23 @@
 
   let progressPercent = $derived(
     selectedTask && selectedTask.total_size && selectedTask.total_size > 0
-      ? (selectedTask.downloaded_size / selectedTask.total_size) * 100
+      ? Math.min(100, (selectedTask.downloaded_size / selectedTask.total_size) * 100)
       : selectedTask?.status === 'Completed'
         ? 100
         : 0
   );
 
   async function handleAddTask(data: { url: string; filename: string; savePath: string; segments: number }) {
-    await invokeCommand('add_task', {
+    const newId = await invokeCommand<string>('add_task', {
       url: data.url,
       filename: data.filename,
       savePath: data.savePath,
+      save_path: data.savePath,
       segments: data.segments,
     });
+    if (newId) {
+      selectedTaskId = newId;
+    }
     await refreshTasks();
   }
 
@@ -268,14 +323,20 @@
     startAt: string | null;
     stopAt: string | null;
   }) {
-    await invokeCommand('schedule_task', {
+    const newId = await invokeCommand<string>('schedule_task', {
       url: data.url,
       filename: data.filename,
       savePath: data.savePath,
+      save_path: data.savePath,
       segments: data.segments,
       startAt: data.startAt,
+      start_at: data.startAt,
       stopAt: data.stopAt,
+      stop_at: data.stopAt,
     });
+    if (newId) {
+      selectedTaskId = newId;
+    }
     await refreshTasks();
   }
 
@@ -291,19 +352,20 @@
   }
 
   async function handlePause(taskId: string) {
-    await invokeCommand('pause_task', { taskId });
+    await invokeCommand('pause_task', { taskId, task_id: taskId });
     await refreshTasks();
   }
 
   async function handleResume(taskId: string) {
-    await invokeCommand('resume_task', { taskId });
+    await invokeCommand('resume_task', { taskId, task_id: taskId });
     await refreshTasks();
   }
 
   async function handleCancel(taskId: string) {
-    await invokeCommand('cancel_task', { taskId });
+    await invokeCommand('cancel_task', { taskId, task_id: taskId });
     if (selectedTaskId === taskId) {
-      selectedTaskId = null;
+      const remaining = tasks.filter((t) => t.id !== taskId);
+      selectedTaskId = remaining.length > 0 ? remaining[0].id : null;
     }
     await refreshTasks();
   }
@@ -311,21 +373,40 @@
   async function handleSpeedLimitChange(val: number) {
     settings.speed_limit_kb = val;
     const limitBytes = val > 0 ? val * 1024 : null;
-    await invokeCommand('set_speed_limit', { limitBytes });
+    await invokeCommand('set_speed_limit', { limitBytes, limit_bytes: limitBytes });
     await invokeCommand('save_settings', { settings });
   }
 
   onMount(() => {
     loadInitialSettings();
     refreshTasks();
+
+    let mql: MediaQueryList | null = null;
+    const systemThemeListener = (e: MediaQueryListEvent) => {
+      if (settings.theme === 'system') {
+        document.documentElement.classList.toggle('dark', e.matches);
+      }
+    };
+
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      mql = window.matchMedia('(prefers-color-scheme: dark)');
+      mql.addEventListener('change', systemThemeListener);
+    }
+
     const interval = setInterval(refreshTasks, 1000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      if (mql) {
+        mql.removeEventListener('change', systemThemeListener);
+      }
+    };
   });
 </script>
 
-<div class="flex flex-col h-screen overflow-hidden bg-canvas">
+<div class="flex flex-col h-screen overflow-hidden bg-canvas dark:bg-canvas-dark text-body dark:text-slate-300 transition-colors duration-200">
   <!-- Top App Navigation / Header -->
-  <header class="h-14 bg-surface border-b border-border-light flex items-center justify-between px-5 shadow-ambient">
+  <header class="h-14 bg-surface dark:bg-surface-dark border-b border-border-light dark:border-border-dark flex items-center justify-between px-5 shadow-ambient">
     <div class="flex items-center gap-3">
       <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-primary to-cyan-500 flex items-center justify-center text-white shadow-md p-1.5 ring-1 ring-white/20">
         <svg viewBox="0 0 24 24" class="w-full h-full fill-none stroke-current stroke-[2.5]" stroke-linecap="round" stroke-linejoin="round">
@@ -337,8 +418,8 @@
         </svg>
       </div>
       <div>
-        <h1 class="font-extrabold text-sm text-heading tracking-tight flex items-center gap-2">
-          Segmenta <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-primary/10 text-primary border border-primary/20">v0.1.0-alpha</span>
+        <h1 class="font-extrabold text-sm text-heading dark:text-white tracking-tight flex items-center gap-2">
+          Segmenta <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-primary/10 dark:bg-primary/20 text-primary dark:text-indigo-300 border border-primary/20">v0.1.0-alpha</span>
         </h1>
       </div>
     </div>
@@ -346,32 +427,32 @@
     <!-- Quick global actions -->
     <div class="flex items-center gap-2.5">
       <!-- Speed Limiter Quick Config -->
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-elevated border border-border-light text-xs">
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated border border-border-light dark:border-border-dark text-xs">
         <Wifi class="w-3.5 h-3.5 text-secondary" />
-        <span class="text-subtle font-medium">Throttler:</span>
+        <span class="text-subtle dark:text-slate-400 font-medium">Throttler:</span>
         <select
           value={settings.speed_limit_kb}
           onchange={(e) => handleSpeedLimitChange(Number((e.target as HTMLSelectElement).value))}
-          class="bg-transparent font-mono font-semibold text-heading focus:outline-none cursor-pointer"
+          class="bg-transparent font-mono font-semibold text-heading dark:text-white focus:outline-none cursor-pointer"
         >
-          <option value={0}>Unlimited</option>
-          <option value={1024}>1 MB/s</option>
-          <option value={5120}>5 MB/s</option>
-          <option value={10240}>10 MB/s</option>
-          <option value={20480}>20 MB/s</option>
+          <option value={0} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">Unlimited</option>
+          <option value={1024} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">1 MB/s</option>
+          <option value={5120} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">5 MB/s</option>
+          <option value={10240} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">10 MB/s</option>
+          <option value={20480} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">20 MB/s</option>
         </select>
       </div>
 
       <!-- Schedule Modal Button -->
       <button
         onclick={() => (isSchedulerModalOpen = true)}
-        class="px-3 py-1.5 rounded-lg bg-surface-elevated hover:bg-slate-100 border border-border-light text-heading text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+        class="px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-heading dark:text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
         title="Schedule Downloads"
       >
         <Calendar class="w-3.5 h-3.5 text-secondary" />
         Schedule
         {#if scheduledTasks.length > 0}
-          <span class="ml-1 px-1.5 py-0.2 bg-secondary/15 text-secondary text-[10px] rounded-full font-mono font-bold">
+          <span class="ml-1 px-1.5 py-0.2 bg-secondary/15 dark:bg-secondary/25 text-secondary text-[10px] rounded-full font-mono font-bold">
             {scheduledTasks.length}
           </span>
         {/if}
@@ -380,7 +461,7 @@
       <!-- Settings Modal Button -->
       <button
         onclick={() => (isSettingsModalOpen = true)}
-        class="p-2 rounded-lg bg-surface-elevated hover:bg-slate-100 border border-border-light text-subtle hover:text-heading transition-all shadow-sm"
+        class="p-2 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-subtle dark:text-slate-400 hover:text-heading dark:hover:text-white transition-all shadow-sm"
         title="Preferences & Settings"
       >
         <Settings class="w-4 h-4" />
@@ -418,17 +499,17 @@
 
       <!-- Active Task Details & Segment Inspector -->
       {#if selectedTask}
-        <div class="bg-surface rounded-xl border border-border-light p-4 shadow-ambient">
+        <div class="bg-surface dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-4 shadow-ambient">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold uppercase tracking-wider text-subtle">Inspecting Task</span>
-            <span class="text-xs font-mono font-bold text-primary">{selectedTask.status}</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-subtle dark:text-slate-400">Inspecting Task</span>
+            <span class="text-xs font-mono font-bold text-primary dark:text-indigo-400">{selectedTask.status}</span>
           </div>
 
-          <h3 class="text-base font-bold text-heading mt-1 truncate" title={selectedTask.filename}>
+          <h3 class="text-base font-bold text-heading dark:text-white mt-1 truncate" title={selectedTask.filename}>
             {selectedTask.filename}
           </h3>
 
-          <div class="text-xs text-subtle font-mono truncate mt-0.5" title={selectedTask.url}>
+          <div class="text-xs text-subtle dark:text-slate-400 font-mono truncate mt-0.5" title={selectedTask.url}>
             {selectedTask.url}
           </div>
 
@@ -440,20 +521,20 @@
           />
         </div>
       {:else}
-        <div class="bg-surface rounded-xl border border-border-light p-6 text-center text-subtle shadow-ambient">
-          <Layers class="w-8 h-8 mx-auto text-slate-300 mb-2" />
-          <p class="text-sm font-semibold text-heading">Select a task</p>
-          <p class="text-xs text-subtle mt-0.5">Click any download on the left to inspect its segment status</p>
+        <div class="bg-surface dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6 text-center text-subtle dark:text-slate-400 shadow-ambient">
+          <Layers class="w-8 h-8 mx-auto text-slate-300 dark:text-zinc-600 mb-2" />
+          <p class="text-sm font-semibold text-heading dark:text-white">Select a task</p>
+          <p class="text-xs text-subtle dark:text-slate-400 mt-0.5">Click any download on the left to inspect its segment status</p>
         </div>
       {/if}
 
       <!-- System Quick Specs Banner -->
-      <div class="bg-surface-elevated rounded-xl border border-border-light p-3.5 flex items-center justify-between text-xs">
+      <div class="bg-surface-elevated dark:bg-surface-darkelevated rounded-xl border border-border-light dark:border-border-dark p-3.5 flex items-center justify-between text-xs">
         <div class="flex items-center gap-2">
           <Zap class="w-4 h-4 text-secondary" />
-          <span class="text-body font-medium">HTTP/1.1 Slicing Engine</span>
+          <span class="text-body dark:text-slate-300 font-medium">HTTP/1.1 Slicing Engine</span>
         </div>
-        <span class="font-mono text-subtle">Native WAL SQLite Storage</span>
+        <span class="font-mono text-subtle dark:text-slate-400">Native WAL SQLite Storage</span>
       </div>
     </div>
   </main>

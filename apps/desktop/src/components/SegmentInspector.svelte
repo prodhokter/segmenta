@@ -30,28 +30,28 @@
   );
 </script>
 
-<div class="space-y-2 mt-3 p-4 bg-surface rounded-xl border border-border-light shadow-ambient">
+<div class="space-y-2 mt-3 p-4 bg-surface dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-ambient">
   <div class="flex items-center justify-between text-xs">
     <div class="flex items-center gap-2">
-      <span class="font-semibold text-heading">Multi-Part Segmentation</span>
-      <span class="px-2 py-0.5 rounded-full bg-primary-light text-primary font-mono text-[11px] font-semibold">
+      <span class="font-semibold text-heading dark:text-white">Multi-Part Segmentation</span>
+      <span class="px-2 py-0.5 rounded-full bg-primary-light dark:bg-indigo-950/60 text-primary dark:text-indigo-300 font-mono text-[11px] font-semibold">
         {displaySegments.length} Chunks Active
       </span>
     </div>
-    <span class="text-subtle font-mono">{progressPercent.toFixed(1)}% Reassembled</span>
+    <span class="text-subtle dark:text-slate-400 font-mono">{progressPercent.toFixed(1)}% Reassembled</span>
   </div>
 
   <div class="grid grid-cols-4 sm:grid-cols-8 gap-2 pt-1">
     {#each displaySegments as seg}
-      <div class="bg-surface-elevated rounded-lg p-2 border border-border-light flex flex-col gap-1.5">
+      <div class="bg-surface-elevated dark:bg-surface-darkelevated rounded-lg p-2 border border-border-light dark:border-border-dark flex flex-col gap-1.5">
         <div class="flex items-center justify-between text-[10px]">
-          <span class="font-mono font-medium text-subtle">#{seg.index}</span>
-          <span class="font-mono font-bold {seg.pct === 100 ? 'text-secondary' : 'text-primary'}">
+          <span class="font-mono font-medium text-subtle dark:text-slate-400">#{seg.index}</span>
+          <span class="font-mono font-bold {seg.pct === 100 ? 'text-secondary' : 'text-primary dark:text-indigo-400'}">
             {seg.pct}%
           </span>
         </div>
         <!-- Segment mini progress bar -->
-        <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+        <div class="w-full h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300 {seg.pct === 100 ? 'bg-secondary' : 'bg-primary'}"
             style="width: {seg.pct}%"

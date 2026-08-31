@@ -5,11 +5,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: '#fafafa',
+        canvas: {
+          DEFAULT: '#fafafa',
+          dark: '#0e0e12',
+        },
         primary: {
           DEFAULT: '#4f46e5',
           hover: '#4338ca',
           light: '#e0e7ff',
+          dark: '#3730a3',
         },
         secondary: {
           DEFAULT: '#06b6d4',
@@ -22,12 +26,13 @@ export default {
         surface: {
           DEFAULT: '#ffffff',
           elevated: '#f8fafc',
-          dark: '#121215',
-          darkcard: '#18181b',
+          dark: '#121216',
+          darkcard: '#18181f',
+          darkelevated: '#20202a',
         },
         border: {
           light: '#e2e8f0',
-          dark: '#27272a',
+          dark: '#272732',
         }
       },
       fontFamily: {
