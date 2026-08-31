@@ -7,7 +7,7 @@ export default {
       colors: {
         canvas: {
           DEFAULT: '#fafafa',
-          dark: '#0e0e12',
+          dark: '#09090b',
         },
         primary: {
           DEFAULT: '#4f46e5',
@@ -20,19 +20,22 @@ export default {
           hover: '#0891b2',
           light: '#cffafe',
         },
-        heading: '#0f172a',
-        body: '#334155',
-        subtle: '#64748b',
+        heading: {
+          DEFAULT: '#09090b',
+          dark: '#f4f4f5',
+        },
+        body: '#27272a',
+        subtle: '#71717a',
         surface: {
           DEFAULT: '#ffffff',
-          elevated: '#f8fafc',
-          dark: '#121216',
+          elevated: '#f4f4f5',
+          dark: '#121215',
           darkcard: '#18181f',
-          darkelevated: '#20202a',
+          darkelevated: '#1c1c24',
         },
         border: {
-          light: '#e2e8f0',
-          dark: '#272732',
+          light: '#e4e4e7',
+          dark: '#27272a',
         }
       },
       fontFamily: {
@@ -40,8 +43,10 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        ambient: '0 1px 3px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02)',
-        card: '0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03)',
+        ambient: '0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02)',
+        card: '0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -2px rgba(0, 0, 0, 0.02)',
+        glow: '0 0 20px -3px rgba(79, 70, 229, 0.25)',
+        cyanGlow: '0 0 20px -3px rgba(6, 182, 212, 0.25)',
       }
     },
   },

@@ -1,17 +1,27 @@
 <script lang="ts">
-  import { X, Plus, Folder, Link2, Video, Check } from 'lucide-svelte';
+  import { X, Plus, Folder, Link2, Video, Check, Layers } from 'lucide-svelte';
   import type { VariantStream } from '$lib/types';
+  import { t, type LanguageCode } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
     defaultDownloadDir: string;
     defaultSegments: number;
+    currentLang?: LanguageCode;
     onClose: () => void;
     onSubmit: (data: { url: string; filename: string; savePath: string; segments: number }) => void;
     onProbeM3u8?: (url: string) => Promise<VariantStream[]>;
   }
 
-  let { isOpen, defaultDownloadDir, defaultSegments, onClose, onSubmit, onProbeM3u8 }: Props = $props();
+  let {
+    isOpen,
+    defaultDownloadDir,
+    defaultSegments,
+    currentLang = 'en',
+    onClose,
+    onSubmit,
+    onProbeM3u8
+  }: Props = $props();
 
   let url = $state('');
   let filename = $state('');
@@ -106,53 +116,60 @@
 </script>
 
 {#if isOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-add-title"
+  >
     <div class="bg-surface dark:bg-surface-dark rounded-2xl border border-border-light dark:border-border-dark shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
       <!-- Modal Header -->
-      <div class="p-4 bg-surface-elevated dark:bg-surface-darkelevated border-b border-border-light dark:border-border-dark flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-primary-light dark:bg-indigo-950/60 flex items-center justify-center text-primary dark:text-indigo-300">
-            <Plus class="w-4 h-4" />
+      <div class="p-4 sm:px-6 bg-surface-elevated dark:bg-surface-darkelevated border-b border-border-light dark:border-border-dark flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-primary/10 dark:bg-primary/20 border border-primary/20 flex items-center justify-center text-primary dark:text-indigo-400">
+            <Plus class="w-5 h-5" />
           </div>
           <div>
-            <h3 class="font-bold text-sm text-heading dark:text-white">New Download Task</h3>
-            <p class="text-xs text-subtle dark:text-slate-400">Configure multi-connection segmentation or media stream</p>
+            <h3 id="modal-add-title" class="font-bold text-sm text-heading dark:text-white">{t('modal.add.title', currentLang)}</h3>
+            <p class="text-xs text-subtle dark:text-zinc-400">{t('modal.add.sub', currentLang)}</p>
           </div>
         </div>
         <button
+          type="button"
           onclick={onClose}
-          class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-subtle dark:text-slate-400 hover:text-heading dark:hover:text-white transition-colors"
+          class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-subtle dark:text-zinc-400 hover:text-heading dark:hover:text-white transition-colors"
+          aria-label={t('modal.add.cancel', currentLang)}
         >
           <X class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Form Body -->
-      <form onsubmit={handleSubmit} class="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+      <form onsubmit={handleSubmit} class="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
         <div>
-          <label for="url-input" class="block text-xs font-semibold text-heading dark:text-white mb-1 flex items-center gap-1.5">
-            <Link2 class="w-3.5 h-3.5 text-primary dark:text-indigo-400" /> Source URL
+          <label for="url-input" class="block text-xs font-bold text-heading dark:text-white mb-1.5 flex items-center gap-1.5">
+            <Link2 class="w-3.5 h-3.5 text-primary dark:text-indigo-400" /> {t('modal.add.url_label', currentLang)}
           </label>
           <input
             id="url-input"
             type="url"
             required
-            placeholder="https://example.com/files/archive.zip or .m3u8 stream"
+            placeholder={t('modal.add.url_placeholder', currentLang)}
             bind:value={url}
-            class="w-full px-3.5 py-2 text-sm bg-surface dark:bg-zinc-900 rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white placeholder-subtle dark:placeholder-zinc-500 font-mono"
+            class="w-full px-3.5 py-2.5 text-xs bg-surface dark:bg-surface-darkcard rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white placeholder-subtle dark:placeholder-zinc-500 font-mono"
           />
         </div>
 
         <!-- HLS Stream Alert Banner -->
         {#if isHlsDetected}
-          <div class="p-3.5 rounded-xl bg-gradient-to-r from-secondary-light/60 to-primary-light/50 dark:from-cyan-950/50 dark:to-indigo-950/50 border border-secondary/30 dark:border-secondary/40 space-y-2.5">
+          <div class="p-3.5 rounded-xl bg-gradient-to-r from-secondary/10 to-primary/10 border border-secondary/30 space-y-2.5">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <Video class="w-4 h-4 text-secondary" />
-                <span class="text-xs font-bold text-heading dark:text-white">HLS (M3U8) Stream Detected</span>
+                <span class="text-xs font-bold text-heading dark:text-white">{t('modal.add.hls_detected', currentLang)}</span>
               </div>
               {#if isProbingHls}
-                <span class="text-[11px] font-mono text-subtle dark:text-slate-400 animate-pulse">Probing qualities...</span>
+                <span class="text-[11px] font-mono text-subtle dark:text-zinc-400 animate-pulse">{t('modal.add.hls_probing', currentLang)}</span>
               {:else if hlsVariants.length > 0}
                 <span class="text-[11px] font-mono font-bold text-primary dark:text-indigo-300">{hlsVariants.length} Quality Profiles</span>
               {/if}
@@ -160,13 +177,13 @@
 
             {#if hlsVariants.length > 0}
               <div class="space-y-1.5 pt-1">
-                <span class="text-[11px] text-subtle dark:text-slate-400 font-medium block">Select Variant / Bitrate:</span>
+                <span class="text-[11px] text-subtle dark:text-zinc-400 font-medium block">{t('modal.add.hls_sub', currentLang)}</span>
                 <div class="grid grid-cols-1 gap-1.5 max-h-32 overflow-y-auto">
                   {#each hlsVariants as v}
                     <button
                       type="button"
                       onclick={() => handleSelectVariant(v.url)}
-                      class="px-2.5 py-1.5 rounded-lg border text-left text-xs font-mono flex items-center justify-between transition-all {selectedVariantUrl === v.url ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface dark:bg-zinc-900 border-border-light dark:border-border-dark text-body dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800'}"
+                      class="px-3 py-2 rounded-lg border text-left text-xs font-mono flex items-center justify-between transition-all {selectedVariantUrl === v.url ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface dark:bg-surface-darkcard border-border-light dark:border-border-dark text-body dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800'}"
                     >
                       <div class="truncate">
                         <span class="font-bold">{v.resolution || 'Auto Stream'}</span>
@@ -182,8 +199,8 @@
                 </div>
               </div>
             {:else if !isProbingHls}
-              <p class="text-[11px] text-body dark:text-slate-300">
-                Segmenta will automatically parse sequential TS video fragments into a single combined file.
+              <p class="text-[11px] text-body dark:text-zinc-300">
+                {t('modal.add.hls_note', currentLang)}
               </p>
             {/if}
           </div>
@@ -191,20 +208,22 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label for="filename-input" class="block text-xs font-semibold text-heading dark:text-white mb-1">Target Filename</label>
+            <label for="filename-input" class="block text-xs font-bold text-heading dark:text-white mb-1.5">{t('modal.add.filename_label', currentLang)}</label>
             <input
               id="filename-input"
               type="text"
-              placeholder="archive.zip (auto-probed if empty)"
+              placeholder={t('modal.add.filename_placeholder', currentLang)}
               bind:value={filename}
-              class="w-full px-3 py-1.5 text-xs bg-surface dark:bg-zinc-900 rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white placeholder-subtle dark:placeholder-zinc-500"
+              class="w-full px-3.5 py-2 text-xs bg-surface dark:bg-surface-darkcard rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white placeholder-subtle dark:placeholder-zinc-500 font-mono"
             />
           </div>
 
           <div>
-            <label for="segments-input" class="block text-xs font-semibold text-heading dark:text-white mb-1 flex items-center justify-between">
-              <span>Parallel Slices</span>
-              <span class="font-mono text-primary dark:text-indigo-400 font-bold">{isHlsDetected ? '1 (HLS)' : `${segments} Segments`}</span>
+            <label for="segments-input" class="block text-xs font-bold text-heading dark:text-white mb-1.5 flex items-center justify-between">
+              <span>{t('modal.add.slices_label', currentLang)}</span>
+              <span class="font-mono text-primary dark:text-indigo-400 font-extrabold px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-xs">
+                {isHlsDetected ? '1 (HLS)' : `${segments} ${t('modal.add.segments', currentLang)}`}
+              </span>
             </label>
             <input
               id="segments-input"
@@ -214,37 +233,37 @@
               step="1"
               disabled={isHlsDetected}
               bind:value={segments}
-              class="w-full accent-primary mt-1.5 disabled:opacity-40"
+              class="w-full accent-primary mt-1.5 disabled:opacity-40 cursor-pointer"
             />
           </div>
         </div>
 
         <div>
-          <label for="savepath-input" class="block text-xs font-semibold text-heading dark:text-white mb-1 flex items-center gap-1.5">
-            <Folder class="w-3.5 h-3.5 text-subtle dark:text-slate-400" /> Destination Directory
+          <label for="savepath-input" class="block text-xs font-bold text-heading dark:text-white mb-1.5 flex items-center gap-1.5">
+            <Folder class="w-3.5 h-3.5 text-primary dark:text-indigo-400" /> {t('modal.add.dest_label', currentLang)}
           </label>
           <input
             id="savepath-input"
             type="text"
             bind:value={savePath}
-            class="w-full px-3 py-1.5 text-xs bg-surface dark:bg-zinc-900 rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white font-mono"
+            class="w-full px-3.5 py-2 text-xs bg-surface dark:bg-surface-darkcard rounded-lg border border-border-light dark:border-border-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-heading dark:text-white font-mono"
           />
         </div>
 
         <!-- Footer Actions -->
-        <div class="pt-2 flex items-center justify-end gap-2.5">
+        <div class="pt-3 flex items-center justify-end gap-2.5 border-t border-border-light dark:border-border-dark">
           <button
             type="button"
             onclick={onClose}
-            class="px-4 py-2 text-xs font-semibold rounded-lg bg-surface dark:bg-zinc-900 border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-slate-300 transition-colors"
+            class="px-4 py-2 text-xs font-semibold rounded-lg bg-surface dark:bg-surface-darkcard border border-border-light dark:border-border-dark hover:bg-slate-100 dark:hover:bg-zinc-800 text-body dark:text-zinc-300 transition-colors"
           >
-            Cancel
+            {t('modal.add.cancel', currentLang)}
           </button>
           <button
             type="submit"
-            class="px-4 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-hover text-white shadow-sm transition-colors flex items-center gap-1.5"
+            class="px-5 py-2 text-xs font-bold rounded-lg bg-primary hover:bg-primary-hover text-white shadow-md shadow-primary/20 transition-all flex items-center gap-1.5"
           >
-            <Plus class="w-3.5 h-3.5" /> Start Download
+            <Plus class="w-3.5 h-3.5" /> {t('modal.add.submit', currentLang)}
           </button>
         </div>
       </form>
