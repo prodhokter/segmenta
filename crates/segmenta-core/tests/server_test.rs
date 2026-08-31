@@ -12,7 +12,7 @@ async fn test_http_server_ping_and_create_task() {
 
     // Use a random local port
     let addr = "127.0.0.1:45679";
-    start_http_server(engine.clone(), addr).await.expect("Failed to start server");
+    start_http_server::<fn(String)>(engine.clone(), addr, None).await.expect("Failed to start server");
 
     // Wait for listener to bind
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
