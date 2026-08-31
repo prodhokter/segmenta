@@ -1,5 +1,16 @@
 const NATIVE_HOST = 'com.segmenta.downloader';
 const DESKTOP_HTTP_ENDPOINT = 'http://127.0.0.1:45678/api/tasks';
+const DESKTOP_PING_ENDPOINT = 'http://127.0.0.1:45678/ping';
+
+// Interceptable file extensions (IDM-style comprehensive extensions)
+const INTERCEPT_EXTENSIONS = new Set([
+  'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso', 'dmg', 'pkg',
+  'exe', 'msi', 'bin', 'deb', 'rpm', 'apk', 'appimage',
+  'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp',
+  'mp3', 'flac', 'wav', 'aac', 'ogg', 'wma', 'm4a', 'opus',
+  'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'epub', 'mobi',
+  'torrent', 'csv', 'psd', 'ai', 'img', 'vhd', 'vmdk'
+]);
 
 export interface StreamItem {
   id: string;
@@ -180,11 +191,95 @@ chrome.webRequest.onHeadersReceived.addListener(
   ['responseHeaders']
 );
 
+// Helper to extract file extension from URL or filename
+function getFileExtension(url: string, filename?: string): string {
+  if (filename) {
+    const parts = filename.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  }
+
+  try {
+    const pathname = new URL(url).pathname;
+    const cleanPath = pathname.split('?')[0].split('#')[0];
+    const parts = cleanPath.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  } catch {
+    // If URL parsing fails, extract from raw string
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    const parts = cleanUrl.split('.');
+    if (parts.length > 1) {
+      return parts.pop()!.toLowerCase().trim();
+    }
+  }
+  return '';
+}
+
+// Show desktop/browser notification when Segmenta takes over a download
+function showSegmentaNotification(title: string, message: string) {
+  try {
+    if (chrome.notifications && chrome.notifications.create) {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: `Segmenta — ${title}`,
+        message,
+        priority: 2,
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to display browser notification:', err);
+  }
+}
+
 // Intercept browser downloads
-chrome.downloads.onCreated.addListener((downloadItem) => {
+chrome.downloads.onCreated.addListener(async (downloadItem) => {
   if (!autoIntercept) return;
   if (!downloadItem.url || !downloadItem.url.startsWith('http')) return;
 
+  const rawFilename = downloadItem.filename ? downloadItem.filename.split(/[\\/]/).pop() : undefined;
+  const ext = getFileExtension(downloadItem.url, rawFilename);
+
+  // IDM parity check: match known interceptable extensions or mime types
+  const shouldIntercept =
+    (ext && INTERCEPT_EXTENSIONS.has(ext)) ||
+    (downloadItem.mime && (
+      downloadItem.mime.startsWith('video/') ||
+      downloadItem.mime.startsWith('audio/') ||
+      downloadItem.mime.includes('zip') ||
+      downloadItem.mime.includes('rar') ||
+      downloadItem.mime.includes('tar') ||
+      downloadItem.mime.includes('octet-stream') ||
+      downloadItem.mime.includes('pdf')
+    ));
+
+  if (!shouldIntercept) {
+    return;
+  }
+
+  // Cancel the browser's built-in single-threaded download immediately
+  try {
+    chrome.downloads.cancel(downloadItem.id, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('Could not cancel browser download:', chrome.runtime.lastError.message);
+      }
+      chrome.downloads.erase({ id: downloadItem.id }, () => {
+        if (chrome.runtime.lastError) {
+          // Ignore erase error if already removed
+        }
+      });
+    });
+  } catch (e) {
+    console.warn('Error canceling browser download:', e);
+  }
+
+  // Resolve target filename
+  const finalFilename = rawFilename || downloadItem.url.split('?')[0].split('/').pop() || 'download';
+
+  // Capture cookies, Referer, User-Agent, and headers
   chrome.cookies.getAll({ url: downloadItem.url }, (cookies) => {
     const cookieHeader = cookies ? cookies.map((c) => `${c.name}=${c.value}`).join('; ') : '';
 
@@ -192,7 +287,7 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
       type: 'CREATE_TASK',
       payload: {
         url: downloadItem.url,
-        filename: downloadItem.filename || undefined,
+        filename: finalFilename,
         headers: {
           Cookie: cookieHeader,
           'User-Agent': navigator.userAgent,
@@ -205,10 +300,17 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
     // Save to recent downloads
     saveRecentDownload({
       url: downloadItem.url,
-      filename: downloadItem.filename || downloadItem.url.split('/').pop() || 'download',
+      filename: finalFilename,
       timestamp: Date.now(),
     });
 
+    // Notify user via browser notification
+    showSegmentaNotification(
+      'Download Intercepted',
+      `Segmenta has taken over: "${finalFilename}" with multi-segment acceleration.`
+    );
+
+    // Dispatch CREATE_TASK to Segmenta Native Messaging Host & HTTP fallback
     dispatchToNativeAndDesktop(payload);
   });
 });
@@ -220,6 +322,83 @@ function saveRecentDownload(item: { url: string; filename: string; timestamp: nu
     if (recent.length > 20) recent.pop();
     chrome.storage.local.set({ recent_downloads: recent });
   });
+}
+
+export interface HostStatusResponse {
+  type?: string;
+  status?: string;
+  version?: string;
+  error?: string;
+  connected?: boolean;
+  source?: 'native' | 'http';
+}
+
+// Function to check connection status against Native Messaging AND HTTP fallback
+export function checkConnectionStatus(callback: (res: HostStatusResponse) => void) {
+  let finished = false;
+
+  // 1. Try Native Messaging Host first
+  try {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, { type: 'PING' }, (nativeRes: any) => {
+      if (!chrome.runtime.lastError && nativeRes && !nativeRes.error) {
+        if (!finished) {
+          finished = true;
+          callback({
+            connected: true,
+            status: nativeRes.status || 'online',
+            version: nativeRes.version || '0.1.0',
+            source: 'native',
+          });
+          return;
+        }
+      }
+
+      // If native messaging failed or errored, try HTTP fallback
+      checkHttpPing();
+    });
+  } catch {
+    checkHttpPing();
+  }
+
+  // 2. HTTP /ping endpoint check helper
+  function checkHttpPing() {
+    fetch(DESKTOP_PING_ENDPOINT, { method: 'GET' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP status ${r.status}`);
+        return r.json();
+      })
+      .then((data: any) => {
+        if (!finished) {
+          finished = true;
+          callback({
+            connected: true,
+            status: data.status || 'online',
+            version: data.version || '0.1.0',
+            source: 'http',
+          });
+        }
+      })
+      .catch((err) => {
+        if (!finished) {
+          finished = true;
+          callback({
+            connected: false,
+            error: 'Desktop Offline',
+          });
+        }
+      });
+  }
+
+  // Safety timeout in case both hang
+  setTimeout(() => {
+    if (!finished) {
+      finished = true;
+      callback({
+        connected: false,
+        error: 'Timeout connecting to Segmenta Desktop',
+      });
+    }
+  }, 3000);
 }
 
 // Handle messages from content script or popup
@@ -304,11 +483,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'CHECK_STATUS') {
-    const payload: NativeMessage = {
-      type: 'PING',
-    };
-    dispatchToNativeAndDesktop(payload, (res) => {
-      sendResponse(res);
+    checkConnectionStatus((status) => {
+      sendResponse(status);
     });
     return true;
   }
