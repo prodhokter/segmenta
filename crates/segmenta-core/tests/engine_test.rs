@@ -64,6 +64,11 @@ async fn test_engine_pause_and_cancel_task() {
     let paused_task = engine.get_task(&task_id).unwrap().unwrap();
     assert_eq!(paused_task.status, TaskStatus::Paused);
 
+    // Test resume task updates status to queued and doesn't fail
+    engine.resume_task(&task_id).await.unwrap();
+    let resumed_task = engine.get_task(&task_id).unwrap().unwrap();
+    assert!(resumed_task.status == TaskStatus::Queued || resumed_task.status == TaskStatus::Downloading);
+
     // Test cancel without file cleanup
     engine.cancel_task(&task_id, false).await.unwrap();
     let cancelled_task = engine.get_task(&task_id).unwrap().unwrap();

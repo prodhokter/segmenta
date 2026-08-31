@@ -334,7 +334,15 @@ impl Storage {
 
     pub fn delete_task(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM segments WHERE task_id = ?1", params![id])?;
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])?;
+        conn.execute("DELETE FROM settings WHERE key = ?1", params![format!("schedule_rule_{}", id)])?;
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?;
         Ok(())
     }
 

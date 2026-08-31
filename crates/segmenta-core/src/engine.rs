@@ -232,6 +232,34 @@ impl DownloadEngine {
         Ok(())
     }
 
+    pub async fn resume_task(&self, task_id: &str) -> Result<(), String> {
+        let task_opt = self.storage.get_task(task_id).map_err(|e| e.to_string())?;
+        let task = task_opt.ok_or_else(|| "Task not found".to_string())?;
+
+        if task.status == TaskStatus::Completed {
+            return Ok(());
+        }
+
+        {
+            let active = self.active_tasks.lock().await;
+            if active.contains_key(task_id) {
+                return Ok(());
+            }
+        }
+
+        self.storage
+            .update_task_status(task_id, TaskStatus::Queued, None)
+            .map_err(|e| e.to_string())?;
+
+        let engine = self.clone();
+        let tid = task_id.to_string();
+        tokio::spawn(async move {
+            let _ = engine.start_download(&tid, None).await;
+        });
+
+        Ok(())
+    }
+
     pub async fn cancel_task(&self, task_id: &str, cleanup_partial: bool) -> Result<(), String> {
         let mut active = self.active_tasks.lock().await;
         if let Some(token) = active.remove(task_id) {
@@ -243,7 +271,13 @@ impl DownloadEngine {
 
         if cleanup_partial {
             if let Ok(Some(task)) = self.storage.get_task(task_id) {
-                let _ = tokio::fs::remove_dir_all(&task.temp_path).await;
+                let temp_path = std::path::PathBuf::from(&task.temp_path);
+                if temp_path.exists() {
+                    if let Err(_) = tokio::fs::remove_dir_all(&temp_path).await {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        let _ = tokio::fs::remove_dir_all(&temp_path).await;
+                    }
+                }
             }
         }
 
@@ -264,11 +298,30 @@ impl DownloadEngine {
         let _ = self.scheduler.remove_from_queue(task_id).await;
 
         if let Ok(Some(task)) = self.storage.get_task(task_id) {
-            // Always clean up temp directory
-            let _ = tokio::fs::remove_dir_all(&task.temp_path).await;
+            // Clean up temp directory
+            let temp_path = std::path::PathBuf::from(&task.temp_path);
+            if temp_path.exists() {
+                if let Err(_) = tokio::fs::remove_dir_all(&temp_path).await {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    let _ = tokio::fs::remove_dir_all(&temp_path).await;
+                }
+            }
+
+            // Also clean up any segment part files if referenced
+            if let Ok(segments) = self.storage.get_segments_for_task(task_id) {
+                for seg in segments {
+                    let p = std::path::PathBuf::from(&seg.part_filename);
+                    if p.exists() {
+                        let _ = tokio::fs::remove_file(p).await;
+                    }
+                }
+            }
 
             if delete_files {
-                let _ = tokio::fs::remove_file(&task.save_path).await;
+                let save_path = std::path::PathBuf::from(&task.save_path);
+                if save_path.exists() {
+                    let _ = tokio::fs::remove_file(&save_path).await;
+                }
             }
         }
 
@@ -290,6 +343,9 @@ impl DownloadEngine {
         let cancel_token = CancellationToken::new();
         {
             let mut active = self.active_tasks.lock().await;
+            if active.contains_key(task_id) {
+                return Ok(());
+            }
             active.insert(task_id.to_string(), cancel_token.clone());
         }
         self.scheduler.mark_active(task_id.to_string()).await;
@@ -367,7 +423,7 @@ impl DownloadEngine {
                     return Ok(());
                 }
                 Err(err) => {
-                    if err == "Cancelled" {
+                    if err == "Cancelled" || cancel_token.is_cancelled() {
                         return Ok(());
                     }
                     self.storage
@@ -511,18 +567,21 @@ impl DownloadEngine {
 
         // Await segment completions
         let mut download_error: Option<String> = None;
+        let mut was_cancelled = false;
         for handle in handles {
             match handle.await {
                 Ok(Ok(())) => {}
                 Ok(Err(err)) => {
                     if err == "Cancelled" {
-                        // Handled by cancel_token/pause_task
-                        return Ok(());
+                        was_cancelled = true;
+                    } else if download_error.is_none() {
+                        download_error = Some(err);
                     }
-                    download_error = Some(err);
                 }
                 Err(join_err) => {
-                    download_error = Some(join_err.to_string());
+                    if download_error.is_none() {
+                        download_error = Some(join_err.to_string());
+                    }
                 }
             }
         }
@@ -534,6 +593,10 @@ impl DownloadEngine {
             active.remove(task_id);
         }
         self.scheduler.mark_completed_or_inactive(task_id).await;
+
+        if was_cancelled || cancel_token.is_cancelled() {
+            return Ok(());
+        }
 
         if let Some(err) = download_error {
             self.storage
