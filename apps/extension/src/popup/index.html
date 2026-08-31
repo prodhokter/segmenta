@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Segmenta Downloader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-color: #09090b;
+        --card-bg: #121215;
+        --border-color: #27272a;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --brand-primary: #4f46e5;
+        --brand-accent: #06b6d4;
+        --success: #10b981;
+        --danger: #ef4444;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        width: 320px;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-primary);
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 14px;
+        user-select: none;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 12px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .logo-icon {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 800;
+        font-size: 11px;
+      }
+
+      .brand-name {
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: -0.02em;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-secondary);
+      }
+
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: var(--text-secondary);
+      }
+
+      .status-pill.online {
+        color: var(--success);
+        background: rgba(16, 185, 129, 0.1);
+      }
+      .status-pill.online .status-dot {
+        background-color: var(--success);
+      }
+
+      .status-pill.offline {
+        color: var(--danger);
+        background: rgba(239, 68, 68, 0.1);
+      }
+      .status-pill.offline .status-dot {
+        background-color: var(--danger);
+      }
+
+      .section-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+      }
+
+      .card {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 12px;
+      }
+
+      .stats-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+
+      .mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+      }
+
+      .btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: var(--brand-primary);
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+
+      .btn:hover {
+        background: #4338ca;
+      }
+
+      .recent-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .recent-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 6px;
+        font-size: 11px;
+      }
+
+      .recent-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+        color: var(--text-primary);
+      }
+
+      .empty-state {
+        text-align: center;
+        color: var(--text-secondary);
+        font-size: 12px;
+        padding: 12px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="brand">
+        <div class="logo-icon">S</div>
+        <div class="brand-name">Segmenta</div>
+      </div>
+      <div id="status-badge" class="status-pill offline">
+        <span class="status-dot"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats-row">
+        <span>Engine Bridge:</span>
+        <span id="engine-version" class="mono text-secondary">Native IPC</span>
+      </div>
+    </div>
+
+    <div class="section-title">Quick Actions</div>
+    <button id="btn-download-tab" class="btn" style="margin-bottom: 12px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      Grab Active Tab Video / Audio
+    </button>
+
+    <div class="section-title">Recent Handled Downloads</div>
+    <div class="card">
+      <div id="recent-container" class="recent-list">
+        <div class="empty-state">No downloads intercepted yet.</div>
+      </div>
+    </div>
+
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

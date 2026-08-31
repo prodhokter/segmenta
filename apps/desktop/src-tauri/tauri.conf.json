@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
+  "productName": "Segmenta",
+  "version": "0.1.0",
+  "identifier": "com.segmenta.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Segmenta — High-Speed Download Manager",
+        "width": 1120,
+        "height": 740,
+        "minWidth": 800,
+        "minHeight": 540,
+        "decorations": true,
+        "resizable": true
+      }
+    ]
+  }
+}

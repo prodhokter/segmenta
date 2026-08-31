@@ -1,0 +1,47 @@
+---
+name: Feature Request
+description: Propose a new feature or architectural enhancement for Segmenta
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! Please explain the problem you are solving and your proposed solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem? Please describe.
+      description: A clear and concise description of the problem or limitation you are facing.
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe alternatives you've considered
+      description: Any alternative solutions or features you've considered.
+  - type: dropdown
+    id: target_area
+    attributes:
+      label: Target Area
+      options:
+        - Core Engine / Download Protocol
+        - Bandwidth Limiting / Scheduling
+        - Browser Extension & Media Sniffing
+        - Desktop GUI & Visualizations
+        - Platform / OS Integration
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any other context, diagrams, or mockups about the feature request here.

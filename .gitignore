@@ -1,0 +1,23 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+.svelte-kit/
+build/
+
+# App & Local data
+*.part
+*.part.*
+downloads/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+Thumbs.db

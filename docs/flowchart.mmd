@@ -1,0 +1,53 @@
+graph TD
+    A["User Personas"] --> B["Desktop Client"]
+    A --> C["Browser Extension"]
+    B --> D["IPC Server (Local HTTP)"]
+    C --> D
+    D --> E["Download Engine"]
+    E --> F["File Slicer & Reassembler"]
+    E --> G["Bandwidth Throttler"]
+    E --> H["Retry & Resume Manager"]
+    E --> I["HLS/M3U8 Handler"]
+    E --> J["Storage Manager"]
+    J --> K[("Local File System")]
+    E --> L["Task Scheduler"]
+    B --> M["GUI Dashboard"]
+    M --> N["Task Queue"]
+    N --> E
+    C --> O["Media Sniffer"]
+    O --> P["Floating Overlay UI"]
+    P --> Q["Send Download Request"]
+    Q --> D
+    C --> R["Cookie & Header Extractor"]
+    R --> Q
+    E --> S["Error Handler"]
+    S --> T["Fallback to Single Connection"]
+    S --> U["Logging & Metrics"]
+    subgraph Users["Users & Client Channels"]
+        A
+        B
+        C
+    end
+    subgraph Core["Core Backend Services"]
+        D
+        E
+        F
+        G
+        H
+        I
+        J
+        L
+        S
+        T
+        U
+    end
+    subgraph UI["Desktop GUI"]
+        M
+        N
+    end
+    subgraph Extension["Browser Extension"]
+        O
+        P
+        Q
+        R
+    end

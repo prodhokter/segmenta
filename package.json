@@ -1,0 +1,17 @@
+{
+  "name": "segmenta-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:desktop": "npm --prefix apps/desktop run tauri dev",
+    "build:desktop": "npm --prefix apps/desktop run tauri build",
+    "dev:extension": "npm --prefix apps/extension run dev",
+    "build:extension": "npm --prefix apps/extension run build",
+    "test:crates": "cargo test --workspace",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings"
+  }
+}

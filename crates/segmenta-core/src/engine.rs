@@ -1,0 +1,351 @@
+use crate::segment::{calculate_segments, download_segment, reassemble_segments};
+use crate::storage::Storage;
+use crate::throttler::TokenBucket;
+use crate::types::{SegmentStatus, TaskRecord, TaskStatus};
+use chrono::Utc;
+use reqwest::header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH, ETAG, LAST_MODIFIED};
+use reqwest::Client;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+#[derive(Clone)]
+pub struct DownloadEngine {
+    storage: Storage,
+    client: Client,
+    throttler: Arc<TokenBucket>,
+    temp_dir: String,
+    active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
+}
+
+impl DownloadEngine {
+    pub fn new(storage: Storage, temp_dir: String) -> Self {
+        Self {
+            storage,
+            client: Client::builder()
+                .pool_max_idle_per_host(8)
+                .build()
+                .unwrap_or_default(),
+            throttler: Arc::new(TokenBucket::new(None)),
+            temp_dir,
+            active_tasks: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn set_speed_limit(&self, speed_limit_bytes: Option<u64>) {
+        self.throttler.set_limit(speed_limit_bytes);
+    }
+
+    pub fn get_task(&self, task_id: &str) -> rusqlite::Result<Option<TaskRecord>> {
+        self.storage.get_task(task_id)
+    }
+
+    pub fn get_segments(
+        &self,
+        task_id: &str,
+    ) -> rusqlite::Result<Vec<crate::types::SegmentRecord>> {
+        self.storage.get_segments_for_task(task_id)
+    }
+
+    pub fn list_tasks(&self) -> rusqlite::Result<Vec<TaskRecord>> {
+        self.storage.list_tasks()
+    }
+
+    pub async fn add_task(
+        &self,
+        url: String,
+        mut filename: String,
+        save_path: String,
+        segments_count: u32,
+        headers: HashMap<String, String>,
+    ) -> Result<String, String> {
+        let task_id = Uuid::new_v4().to_string();
+        let temp_task_dir = format!("{}/task_{}", self.temp_dir, task_id);
+        let _ = tokio::fs::create_dir_all(&temp_task_dir).await;
+
+        // Dispatch probe request (HEAD, fallback to GET Range bytes=0-0 if HEAD fails or doesn't return length)
+        let mut total_size = None;
+        let mut etag = None;
+        let mut last_modified = None;
+        let mut accept_ranges = false;
+
+        let mut head_req = self.client.head(&url);
+        for (k, v) in &headers {
+            if let (Ok(h_name), Ok(h_val)) = (
+                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                reqwest::header::HeaderValue::from_str(v),
+            ) {
+                head_req = head_req.header(h_name, h_val);
+            }
+        }
+
+        let head_res = head_req.send().await;
+        if let Ok(res) = head_res {
+            if res.status().is_success() {
+                let res_headers = res.headers();
+                if let Some(cl) = res_headers
+                    .get(CONTENT_LENGTH)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok())
+                {
+                    total_size = Some(cl);
+                }
+                if let Some(ar) = res_headers.get(ACCEPT_RANGES).and_then(|v| v.to_str().ok()) {
+                    if ar.to_lowercase().contains("bytes") {
+                        accept_ranges = true;
+                    }
+                }
+                if let Some(et) = res_headers.get(ETAG).and_then(|v| v.to_str().ok()) {
+                    etag = Some(et.to_string());
+                }
+                if let Some(lm) = res_headers.get(LAST_MODIFIED).and_then(|v| v.to_str().ok()) {
+                    last_modified = Some(lm.to_string());
+                }
+                if filename.is_empty() {
+                    if let Some(cd) = res_headers
+                        .get(CONTENT_DISPOSITION)
+                        .and_then(|v| v.to_str().ok())
+                    {
+                        if let Some(extracted) = parse_filename_from_cd(cd) {
+                            filename = extracted;
+                        }
+                    }
+                }
+            }
+        }
+
+        if filename.is_empty() {
+            filename = url
+                .split('?')
+                .next()
+                .unwrap_or("")
+                .split('/')
+                .next_back()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("download.bin")
+                .to_string();
+        }
+
+        // Clamp segments: if server doesn't support ranges or file size unknown, fallback to 1 segment
+        let effective_segments_count = if accept_ranges || total_size.is_some() {
+            segments_count.clamp(1, 32)
+        } else {
+            1
+        };
+
+        let task = TaskRecord {
+            id: task_id.clone(),
+            url,
+            filename,
+            save_path,
+            temp_path: temp_task_dir.clone(),
+            status: TaskStatus::Queued,
+            total_size,
+            downloaded_size: 0,
+            segments_count: effective_segments_count,
+            speed_limit_bytes: None,
+            priority: 5,
+            category_id: None,
+            headers,
+            etag,
+            last_modified,
+            checksum_sha256: None,
+            error_message: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            finished_at: None,
+        };
+
+        self.storage
+            .save_task(&task)
+            .map_err(|e| format!("Database error: {}", e))?;
+
+        if let Some(size) = total_size {
+            let segments = calculate_segments(&task_id, size, task.segments_count, &temp_task_dir);
+            for seg in segments {
+                let _ = self.storage.save_segment(&seg);
+            }
+        }
+
+        Ok(task_id)
+    }
+
+    pub async fn pause_task(&self, task_id: &str) -> Result<(), String> {
+        let mut active = self.active_tasks.lock().await;
+        if let Some(token) = active.remove(task_id) {
+            token.cancel();
+        }
+
+        self.storage
+            .update_task_status(task_id, TaskStatus::Paused, None)
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
+    pub async fn cancel_task(&self, task_id: &str) -> Result<(), String> {
+        let mut active = self.active_tasks.lock().await;
+        if let Some(token) = active.remove(task_id) {
+            token.cancel();
+        }
+
+        self.storage
+            .update_task_status(task_id, TaskStatus::Cancelled, None)
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
+    pub async fn start_download(
+        &self,
+        task_id: &str,
+        progress_sender: Option<broadcast::Sender<TaskRecord>>,
+    ) -> Result<(), String> {
+        let task_opt = self.storage.get_task(task_id).map_err(|e| e.to_string())?;
+        let mut task = task_opt.ok_or_else(|| "Task not found".to_string())?;
+
+        let cancel_token = CancellationToken::new();
+        {
+            let mut active = self.active_tasks.lock().await;
+            active.insert(task_id.to_string(), cancel_token.clone());
+        }
+
+        task.status = TaskStatus::Downloading;
+        task.updated_at = Utc::now();
+        self.storage
+            .update_task_status(task_id, TaskStatus::Downloading, None)
+            .map_err(|e| e.to_string())?;
+
+        if let Some(ref sender) = progress_sender {
+            let _ = sender.send(task.clone());
+        }
+
+        let mut segments = self
+            .storage
+            .get_segments_for_task(task_id)
+            .map_err(|e| e.to_string())?;
+
+        // If no segments exist (e.g. dynamic/streaming file size unknown during probe), generate a single segment
+        if segments.is_empty() {
+            let part_filename = format!("{}/task_{}_part_000.part", task.temp_path, task_id);
+            let single_seg = crate::types::SegmentRecord {
+                id: format!("{}-seg-0", task_id),
+                task_id: task_id.to_string(),
+                segment_index: 0,
+                start_offset: 0,
+                end_offset: task.total_size.map(|s| if s > 0 { s - 1 } else { 0 }),
+                downloaded_bytes: 0,
+                status: SegmentStatus::Pending,
+                part_filename,
+                attempts: 0,
+                last_error: None,
+                updated_at: Utc::now(),
+            };
+            self.storage
+                .save_segment(&single_seg)
+                .map_err(|e| e.to_string())?;
+            segments.push(single_seg);
+        }
+
+        let (tx, mut rx) = mpsc::channel::<(u32, u64)>(100);
+        let mut handles = Vec::new();
+
+        for mut seg in segments.clone() {
+            if seg.status == SegmentStatus::Completed {
+                continue;
+            }
+            let client = self.client.clone();
+            let url = task.url.clone();
+            let headers = task.headers.clone();
+            let throttler = self.throttler.clone();
+            let tx_clone = tx.clone();
+            let c_token = cancel_token.clone();
+
+            let handle = tokio::spawn(async move {
+                tokio::select! {
+                    _ = c_token.cancelled() => {
+                        Err("Cancelled".to_string())
+                    }
+                    res = download_segment(&client, &url, &headers, &mut seg, throttler, tx_clone) => {
+                        res
+                    }
+                }
+            });
+            handles.push(handle);
+        }
+        drop(tx);
+
+        // Progress listener & state tracking
+        let progress_handle = tokio::spawn(async move {
+            let mut _total_downloaded: u64 = 0;
+            while let Some((_idx, bytes)) = rx.recv().await {
+                _total_downloaded += bytes;
+            }
+        });
+
+        // Await segment completions
+        let mut download_error: Option<String> = None;
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => {
+                    if err == "Cancelled" {
+                        // Handled by cancel_token/pause_task
+                        return Ok(());
+                    }
+                    download_error = Some(err);
+                }
+                Err(join_err) => {
+                    download_error = Some(join_err.to_string());
+                }
+            }
+        }
+
+        let _ = progress_handle.await;
+
+        {
+            let mut active = self.active_tasks.lock().await;
+            active.remove(task_id);
+        }
+
+        if let Some(err) = download_error {
+            self.storage
+                .update_task_status(task_id, TaskStatus::Failed, Some(err.clone()))
+                .map_err(|e| e.to_string())?;
+            return Err(err);
+        }
+
+        // Reassembly
+        let part_files: Vec<String> = segments.iter().map(|s| s.part_filename.clone()).collect();
+        reassemble_segments(&part_files, &task.save_path)
+            .await
+            .map_err(|e| format!("Reassembly failed: {}", e))?;
+
+        self.storage
+            .update_task_status(task_id, TaskStatus::Completed, None)
+            .map_err(|e| e.to_string())?;
+
+        if let Some(sender) = progress_sender {
+            if let Ok(Some(finished_task)) = self.storage.get_task(task_id) {
+                let _ = sender.send(finished_task);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn parse_filename_from_cd(cd: &str) -> Option<String> {
+    for part in cd.split(';') {
+        let trimmed = part.trim();
+        if let Some(rest) = trimmed.strip_prefix("filename=") {
+            let clean = rest.trim_matches('"').trim_matches('\'');
+            if !clean.is_empty() {
+                return Some(clean.to_string());
+            }
+        }
+    }
+    None
+}

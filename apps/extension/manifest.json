@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Segmenta — Internet Download Manager",
+  "version": "1.0.0",
+  "description": "High-performance download manager and media sniffer for Segmenta Desktop.",
+  "permissions": [
+    "downloads",
+    "webRequest",
+    "cookies",
+    "nativeMessaging",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/index.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "Segmenta Downloader"
+  }
+}

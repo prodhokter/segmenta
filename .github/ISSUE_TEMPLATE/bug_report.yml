@@ -1,0 +1,76 @@
+---
+name: Bug Report
+description: File a bug report to help improve Segmenta
+title: "[BUG]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please provide as much detailed context as possible so we can diagnose and resolve the issue.
+  - type: input
+    id: version
+    attributes:
+      label: Segmenta Version
+      description: What version of Segmenta are you running? (e.g. v0.1.0, commit hash)
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian)
+        - Linux (Arch/Fedora)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      options:
+        - Desktop GUI (apps/desktop)
+        - Browser Extension (apps/extension)
+        - Core Engine (crates/segmenta-core)
+        - Native Messaging Host (crates/segmenta-host)
+        - Media Sniffer / Stream Grabber
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed step-by-step instructions to reproduce the problem.
+      placeholder: |
+        1. Open Segmenta Desktop GUI
+        2. Click '+ Add Download'
+        3. Enter URL 'https://...'
+        4. Observe error in segment inspector...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A concise description of what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Log Output or Screenshots
+      description: Paste any engine logs or attach screenshots.
+      render: shell

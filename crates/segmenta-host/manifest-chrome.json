@@ -1,0 +1,9 @@
+{
+  "name": "com.segmenta.downloader",
+  "description": "Segmenta Native Messaging Bridge",
+  "path": "segmenta-host.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://*/"
+  ]
+}

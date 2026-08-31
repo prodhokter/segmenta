@@ -1,0 +1,29 @@
+{
+  "name": "segmenta-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "lucide-svelte": "^0.439.0"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.4",
+    "@sveltejs/kit": "^2.5.24",
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "@tauri-apps/cli": "^2.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.45",
+    "svelte": "^5.0.0",
+    "svelte-check": "^3.8.5",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.3"
+  }
+}
