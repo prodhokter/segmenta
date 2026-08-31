@@ -318,6 +318,15 @@ impl Storage {
         Ok(())
     }
 
+    pub fn set_task_completed(&self, task_id: &str, final_size: u64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE tasks SET status = 'COMPLETED', downloaded_size = ?1, total_size = COALESCE(total_size, ?1), error_message = NULL, updated_at = ?2, finished_at = ?2 WHERE id = ?3",
+            params![final_size, Utc::now().to_rfc3339(), task_id],
+        )?;
+        Ok(())
+    }
+
     pub fn update_segment_progress(
         &self,
         task_id: &str,

@@ -294,7 +294,7 @@
     } catch {}
 
     fetchTaskData();
-    const interval = setInterval(fetchTaskData, 500);
+    const interval = setInterval(fetchTaskData, 200);
 
     return () => clearInterval(interval);
   });

@@ -607,13 +607,22 @@ impl DownloadEngine {
 
         // Reassembly
         let part_files: Vec<String> = segments.iter().map(|s| s.part_filename.clone()).collect();
-        reassemble_segments(&part_files, &task.save_path)
-            .await
-            .map_err(|e| format!("Reassembly failed: {}", e))?;
+        let reassemble_res = reassemble_segments(&part_files, &task.save_path).await;
 
-        self.storage
-            .update_task_status(task_id, TaskStatus::Completed, None)
-            .map_err(|e| e.to_string())?;
+        if let Err(e) = reassemble_res {
+            let err_msg = format!("Reassembly failed: {}", e);
+            self.storage
+                .update_task_status(task_id, TaskStatus::Failed, Some(err_msg.clone()))
+                .map_err(|e| e.to_string())?;
+            return Err(err_msg);
+        }
+
+        let final_file_len = tokio::fs::metadata(&task.save_path)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(task.downloaded_size);
+
+        let _ = self.storage.set_task_completed(task_id, final_file_len);
 
         if let Some(sender) = progress_sender {
             if let Ok(Some(finished_task)) = self.storage.get_task(task_id) {

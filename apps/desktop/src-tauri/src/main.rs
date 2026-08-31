@@ -33,7 +33,7 @@ pub fn spawn_progress_window(app: &AppHandle, task_id: &str) -> Result<(), Strin
     }
 
     let url_str = format!("/progress?id={}", task_id);
-    let webview_url = WebviewUrl::App(url_str.into());
+    let webview_url = WebviewUrl::App(url_str.clone().into());
 
     let win_builder = WebviewWindowBuilder::new(app, &window_label, webview_url)
         .title("Download Status — Segmenta")
@@ -43,7 +43,22 @@ pub fn spawn_progress_window(app: &AppHandle, task_id: &str) -> Result<(), Strin
         .decorations(true)
         .center();
 
-    let _window = win_builder.build().map_err(|e| e.to_string())?;
+    let final_builder = if let Some(default_icon) = app.default_window_icon() {
+        win_builder.icon(default_icon.clone()).unwrap_or_else(|_| {
+            let url = WebviewUrl::App(url_str.into());
+            WebviewWindowBuilder::new(app, &window_label, url)
+                .title("Download Status — Segmenta")
+                .inner_size(500.0, 310.0)
+                .min_inner_size(460.0, 280.0)
+                .resizable(false)
+                .decorations(true)
+                .center()
+        })
+    } else {
+        win_builder
+    };
+
+    let _window = final_builder.build().map_err(|e| e.to_string())?;
 
     Ok(())
 }
