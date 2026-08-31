@@ -220,12 +220,18 @@
   <!-- Top App Navigation / Header -->
   <header class="h-14 bg-surface border-b border-border-light flex items-center justify-between px-5 shadow-ambient">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-sm font-black text-base">
-        S
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-primary to-cyan-500 flex items-center justify-center text-white shadow-md p-1.5 ring-1 ring-white/20">
+        <svg viewBox="0 0 24 24" class="w-full h-full fill-none stroke-current stroke-[2.5]" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6H8a4 4 0 0 0-4 4c0 1.5.8 2.8 2 3.5" />
+          <path d="M5 18h11a4 4 0 0 0 4-4c0-1.5-.8-2.8-2-3.5" />
+          <path d="M12 2v4" />
+          <path d="M12 18v4" />
+          <path d="M15 15l-3 3-3-3" />
+        </svg>
       </div>
       <div>
-        <h1 class="font-bold text-sm text-heading tracking-tight flex items-center gap-1.5">
-          Segmenta <span class="text-[10px] px-1.5 py-0.5 rounded font-mono font-medium bg-primary-light text-primary">v0.1.0-alpha</span>
+        <h1 class="font-extrabold text-sm text-heading tracking-tight flex items-center gap-2">
+          Segmenta <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-primary/10 text-primary border border-primary/20">v0.1.0-alpha</span>
         </h1>
       </div>
     </div>

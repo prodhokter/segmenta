@@ -88,39 +88,53 @@ graph TD
 
 ## Quick Start
 
-### Prerequisites
-- **Rust:** Stable toolchain (1.78+ recommended). Install via [rustup.rs](https://rustup.rs).
-- **Node.js:** Node.js v20+ and `npm` or `pnpm`.
-- **Platform Dependencies (Linux only):** `libwebkit2gtk-4.1-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`.
+Segmenta offers two installation methods:
 
-### Installation & Building
+### Method 1: Automated One-Click Setup (Recommended for Windows)
+
+Run the included automated setup script in PowerShell to compile the native host, register browser registry keys, and build the extension in one step:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1
+```
+
+Once finished, simply start the desktop app:
+```bash
+npm run dev:desktop
+```
+
+---
+
+### Method 2: Manual Developer Setup (Cross-Platform)
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/segmenta-org/segmenta.git
+   git clone https://github.com/prodhokter/segmenta.git
    cd segmenta
    ```
 
-2. **Install frontend dependencies:**
+2. **Install dependencies & build:**
    ```bash
    npm install
-   ```
-
-3. **Run Rust workspace test suite:**
-   ```bash
    cargo test --workspace
    ```
 
-4. **Launch Desktop GUI in development mode:**
+3. **Launch Desktop GUI:**
    ```bash
    npm run dev:desktop
    ```
+
+4. **Build Desktop Standalone Installer (.exe / .msi):**
+   ```bash
+   npm --prefix apps/desktop run tauri build
+   ```
+   *The installer will be generated in `apps/desktop/src-tauri/target/release/bundle/nsis/Segmenta_0.1.0_x64-setup.exe`.*
 
 5. **Build Browser Extension:**
    ```bash
    npm run build:extension
    ```
-   The compiled extension will be available in `apps/extension/dist`. Load this folder into your browser via **Developer Mode** (`chrome://extensions` or `edge://extensions`).
+   *Load the `apps/extension/dist` folder into `chrome://extensions` via "Load unpacked".*
 
 ---
 
