@@ -1,5 +1,8 @@
 use segmenta_core::engine::DownloadEngine;
-use segmenta_core::server::start_http_server;
+use segmenta_core::server::{
+    extract_filename_from_url, is_generic_filename, parse_filename_from_content_disposition,
+    sanitize_filename, start_http_server,
+};
 use segmenta_core::storage::Storage;
 use serde_json::json;
 
@@ -54,4 +57,36 @@ async fn test_http_server_ping_and_create_task() {
     let stored_task = storage.get_task(task_id).unwrap().expect("Task not found in DB");
     assert_eq!(stored_task.filename, "download.iso");
     assert_eq!(stored_task.save_path, temp_dir.path().join("download.iso").to_string_lossy().to_string());
+}
+
+#[test]
+fn test_filename_parsing_and_sanitization() {
+    assert!(is_generic_filename(""));
+    assert!(is_generic_filename("download"));
+    assert!(is_generic_filename("download.bin"));
+    assert!(is_generic_filename("download.mp4"));
+    assert!(is_generic_filename("videoplayback"));
+    assert!(!is_generic_filename("archlinux-2026.08.01-x86_64.iso"));
+    assert!(!is_generic_filename("my-document.pdf"));
+
+    let sanitized = sanitize_filename("invalid:filename*with?illegal<chars>.zip");
+    assert_eq!(sanitized, "invalid_filename_with_illegal_chars_.zip");
+
+    let cd1 = r#"attachment; filename="archive_release_v1.0.tar.gz""#;
+    assert_eq!(
+        parse_filename_from_content_disposition(cd1),
+        Some("archive_release_v1.0.tar.gz".to_string())
+    );
+
+    let cd2 = "attachment; filename*=UTF-8''my%20presentation%20file.pdf";
+    assert_eq!(
+        parse_filename_from_content_disposition(cd2),
+        Some("my presentation file.pdf".to_string())
+    );
+
+    let url = "https://example.org/files/linux-distro-v2.3.iso?token=123#frag";
+    assert_eq!(
+        extract_filename_from_url(url),
+        Some("linux-distro-v2.3.iso".to_string())
+    );
 }
