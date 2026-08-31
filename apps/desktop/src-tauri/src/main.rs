@@ -347,6 +347,26 @@ fn open_file_folder(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_file(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let _ = Command::new("cmd").args(["/c", "start", "", &path]).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let _ = Command::new("open").arg(&path).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        let _ = Command::new("xdg-open").arg(&path).spawn();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn exit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -492,6 +512,7 @@ async fn main() {
             set_autostart,
             get_autostart,
             open_file_folder,
+            open_file,
             exit_app
         ])
         .run(tauri::generate_context!())
