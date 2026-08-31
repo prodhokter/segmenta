@@ -141,6 +141,15 @@ pub async fn download_segment(
         return Err(err_msg);
     }
 
+    // If multi-segment worker received 200 OK instead of 206 Partial Content, server does not support segmentation
+    if status == reqwest::StatusCode::OK && segment.start_offset > 0 {
+        let err_msg = "Server does not support partial content ranges (HTTP 200 OK returned for segmented offset)".to_string();
+        segment.status = SegmentStatus::Failed;
+        segment.last_error = Some(err_msg.clone());
+        segment.updated_at = Utc::now();
+        return Err(err_msg);
+    }
+
     // If server returned 200 OK instead of 206 Partial Content, the entire content is served from offset 0
     let (mut file, mut current_bytes) = if status == reqwest::StatusCode::OK && existing_bytes > 0 {
         segment.downloaded_bytes = 0;

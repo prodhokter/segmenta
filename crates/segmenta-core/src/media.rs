@@ -250,7 +250,7 @@ pub async fn download_hls(
     let mut out_file = OpenOptions::new()
         .create(true)
         .write(true)
-        .truncate(true)
+        .append(true)
         .open(output_path)
         .await
         .map_err(|e| format!("Failed to open output file: {}", e))?;
