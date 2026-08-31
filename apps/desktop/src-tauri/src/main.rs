@@ -170,6 +170,7 @@ fn save_settings(settings: AppSettings, state: State<AppState>) -> Result<(), St
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn schedule_task(
     url: String,

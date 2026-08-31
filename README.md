@@ -26,10 +26,13 @@
 ### Key Capabilities
 - **Multi-Connection Dynamic Slicing:** Accelerates download throughput by slicing files into 1–32 parallel HTTP `Range` streams with byte-accurate chunk reassembly.
 - **Automatic Fallback:** Seamlessly detects non-range-capable servers (`Accept-Ranges: none` or `200 OK`) and falls back to robust single-stream writing.
+- **HLS / M3U8 Streaming Media Extraction:** Complete parser and downloader for HLS playlists (`.m3u8`), supporting master variant selection (highest resolution/bandwidth stream) and parallel segment fetching with audio/video stream muxing.
+- **Automated Task Scheduler:** Comprehensive scheduling engine allowing scheduled start and stop times (ISO-8601 / RFC 3339), queue concurrency limits, and time-window enforcement.
+- **Customizable App Settings:** Global configuration for max concurrent downloads, default segment counts (1–32), global speed limits (KB/s), dark/light theme switching, and automatic category path routing.
 - **Smart Media Sniffer:** Manifest V3 browser extension sniffs streaming video and audio elements (`.mp4`, `.m3u8`, `.mp3`) and provides a non-intrusive floating action overlay.
 - **Authentication & Header Preservation:** Automatically captures and passes session cookies, `Referer`, and `User-Agent` headers across native IPC to prevent authentication drops.
 - **Bandwidth Governor:** Token-bucket rate limiter enabling dynamic, sub-millisecond throughput shaping without resetting active connections.
-- **Editorial Desktop Experience:** High-performance GUI featuring a 60 FPS Canvas speedometer, real-time segment chunk inspector, priority queueing, and file categories.
+- **Editorial Desktop Experience:** High-performance GUI featuring a 60 FPS Canvas speedometer, real-time segment chunk inspector, priority queueing, schedule dialogs, settings modal, and automatic file categorization.
 - **Privacy-First & Secure:** Zero telemetry, no third-party tracking, strict local path sanitization against directory traversal, and loopback communication over standard STDIO/IPC.
 
 ---
