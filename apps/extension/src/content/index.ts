@@ -61,7 +61,7 @@ function showToast(message: string, isSuccess = true) {
       toast.style.transform = 'translateY(20px)';
       toast.style.opacity = '0';
     }
-  }, 4000);
+  }, 3500);
 }
 
 // Extract media sources from <video>, <audio>, <source>, blob URLs, and data attributes
@@ -91,7 +91,7 @@ function extractMediaSources(videoEl: HTMLVideoElement): { url: string; type: 'h
   if (videoEl.currentSrc) addSource(videoEl.currentSrc);
   if (videoEl.src) addSource(videoEl.src);
 
-  // 2. Child <source> and <track> elements
+  // 2. Child <source> elements
   const sourceChildren = videoEl.querySelectorAll('source');
   sourceChildren.forEach((srcTag) => {
     const src = (srcTag as HTMLSourceElement).src;
@@ -105,7 +105,7 @@ function extractMediaSources(videoEl: HTMLVideoElement): { url: string; type: 'h
     }
   });
 
-  // 3. Custom attributes frequently used by video players (e.g. data-src, data-hls-src, data-dash-src, etc.)
+  // 3. Custom attributes frequently used by video players
   const dataAttributes = ['data-src', 'data-hls-src', 'data-dash-src', 'data-orig-src', 'data-video-url', 'data-url'];
   for (const attr of dataAttributes) {
     const val = videoEl.getAttribute(attr);
@@ -119,7 +119,6 @@ function extractMediaSources(videoEl: HTMLVideoElement): { url: string; type: 'h
 function getCleanMediaTitle(): string {
   const isYouTube = window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be');
   if (isYouTube) {
-    // Try YouTube video title element
     const ytTitleEl = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, #title h1 yt-formatted-string, h1.title');
     if (ytTitleEl && ytTitleEl.textContent) {
       return ytTitleEl.textContent.trim().replace(/[\\/:*?"<>|]/g, '_').substring(0, 120);
@@ -134,47 +133,58 @@ function getCleanMediaTitle(): string {
     .substring(0, 120);
 }
 
-// Function to inject download overlay over video or player container
+// Keep track of active overlay per player container
+let activeOverlayMap = new WeakMap<HTMLVideoElement, HTMLElement>();
+
 function injectDownloadOverlay(videoEl: HTMLVideoElement) {
-  if (videoEl.dataset.segmentaInjected) return;
-  videoEl.dataset.segmentaInjected = 'true';
+  // Ignore already dismissed or tiny preview videos (e.g. YouTube thumbnails or background audio elements)
+  if (videoEl.dataset.segmentaDismissed === 'true') return;
+  if (activeOverlayMap.has(videoEl)) return;
+
+  const rect = videoEl.getBoundingClientRect();
+  // Filter out tiny thumbnail previews or hidden zero-sized video elements
+  if (rect.width < 240 || rect.height < 140) return;
 
   const container = document.createElement('div');
   container.className = 'segmenta-media-grabber';
   container.style.position = 'absolute';
-  container.style.zIndex = '2147483647';
+  container.style.zIndex = '2147483640';
   container.style.display = 'flex';
   container.style.alignItems = 'center';
   container.style.gap = '6px';
   container.style.background = 'rgba(15, 23, 42, 0.92)';
   container.style.backdropFilter = 'blur(12px)';
-  container.style.border = '1px solid rgba(99, 102, 241, 0.4)';
+  container.style.border = '1px solid rgba(99, 102, 241, 0.45)';
   container.style.borderRadius = '8px';
-  container.style.padding = '5px 8px';
-  container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(79, 70, 229, 0.25)';
+  container.style.padding = '4px 6px';
+  container.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(79, 70, 229, 0.2)';
   container.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   container.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
   container.style.userSelect = 'none';
+  container.style.opacity = '0.9';
+
+  container.onmouseenter = () => { container.style.opacity = '1'; };
+  container.onmouseleave = () => { container.style.opacity = '0.9'; };
 
   // Primary Action Button: "⚡ Download Video"
   const btn = document.createElement('button');
   btn.className = 'segmenta-btn-download';
   btn.innerHTML = `
-    <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; color: #ffffff; letter-spacing: -0.01em;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 11px; color: #ffffff; letter-spacing: -0.01em;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
       </svg>
-      <span>Download Video</span>
+      <span>Download</span>
     </span>
   `;
   btn.style.background = 'linear-gradient(135deg, #4f46e5, #4338ca)';
   btn.style.color = '#ffffff';
-  btn.style.padding = '5px 10px';
-  btn.style.borderRadius = '6px';
+  btn.style.padding = '4px 8px';
+  btn.style.borderRadius = '5px';
   btn.style.border = 'none';
   btn.style.cursor = 'pointer';
   btn.style.transition = 'all 0.15s ease';
-  btn.style.boxShadow = '0 2px 6px rgba(79, 70, 229, 0.4)';
+  btn.style.boxShadow = '0 2px 6px rgba(79, 70, 229, 0.3)';
 
   btn.onmouseenter = () => {
     btn.style.background = 'linear-gradient(135deg, #6366f1, #4f46e5)';
@@ -185,25 +195,24 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     btn.style.transform = 'translateY(0)';
   };
 
-  // Resolution / Quality dropdown: Original / 1080p / 720p / Audio only
+  // Resolution / Quality dropdown
   const qualitySelect = document.createElement('select');
   qualitySelect.className = 'segmenta-quality-select';
   qualitySelect.style.background = 'rgba(30, 41, 59, 0.9)';
   qualitySelect.style.color = '#e2e8f0';
   qualitySelect.style.border = '1px solid rgba(255, 255, 255, 0.15)';
-  qualitySelect.style.borderRadius = '6px';
+  qualitySelect.style.borderRadius = '5px';
   qualitySelect.style.fontSize = '11px';
   qualitySelect.style.fontWeight = '500';
-  qualitySelect.style.padding = '4px 8px';
+  qualitySelect.style.padding = '3px 6px';
   qualitySelect.style.outline = 'none';
   qualitySelect.style.cursor = 'pointer';
-  qualitySelect.style.transition = 'border-color 0.15s ease';
 
   const options: { label: string; value: string }[] = [
-    { label: 'Original Quality', value: 'original' },
-    { label: '1080p Full HD', value: '1080p' },
-    { label: '720p HD', value: '720p' },
-    { label: 'Audio Only (.mp3)', value: 'audio' },
+    { label: 'Auto (Best)', value: 'original' },
+    { label: '1080p', value: '1080p' },
+    { label: '720p', value: '720p' },
+    { label: 'Audio (.mp3)', value: 'audio' },
   ];
 
   options.forEach((opt) => {
@@ -214,6 +223,41 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     el.style.color = '#f8fafc';
     qualitySelect.appendChild(el);
   });
+
+  // Close / Dismiss Button (×)
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'segmenta-btn-close';
+  closeBtn.title = 'Dismiss download overlay for this video';
+  closeBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  `;
+  closeBtn.style.background = 'transparent';
+  closeBtn.style.border = 'none';
+  closeBtn.style.borderRadius = '4px';
+  closeBtn.style.padding = '3px';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.display = 'flex';
+  closeBtn.style.alignItems = 'center';
+  closeBtn.style.justifyContent = 'center';
+  closeBtn.style.transition = 'background 0.15s ease';
+
+  closeBtn.onmouseenter = () => {
+    closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+  };
+  closeBtn.onmouseleave = () => {
+    closeBtn.style.background = 'transparent';
+  };
+
+  closeBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    videoEl.dataset.segmentaDismissed = 'true';
+    container.remove();
+    activeOverlayMap.delete(videoEl);
+  };
 
   // Handle Download trigger
   btn.onclick = (e) => {
@@ -226,7 +270,6 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     let targetType: 'hls' | 'dash' | 'direct' | 'blob' = 'direct';
 
     if (sources.length > 0) {
-      // Prioritize HLS / DASH stream if available, otherwise direct or blob
       const hlsSource = sources.find((s) => s.type === 'hls');
       const dashSource = sources.find((s) => s.type === 'dash');
       const directSource = sources.find((s) => s.type === 'direct');
@@ -237,14 +280,13 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
       targetSrc = videoEl.currentSrc || videoEl.src;
     }
 
-    // Special handling for YouTube or blob-only streams: if targetSrc is blob or missing, fallback to current page URL
     if ((!targetSrc || targetSrc.startsWith('blob:')) && isYouTube) {
       targetSrc = window.location.href;
       targetType = 'direct';
     }
 
     if (!targetSrc) {
-      showToast('Video source URL not detected yet. Please play the video for 1 second.', false);
+      showToast('Video URL not ready yet. Please play the video.', false);
       return;
     }
 
@@ -255,8 +297,8 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
     const filename = `${cleanTitle}_${selectedQuality}.${ext}`;
 
     btn.innerHTML = `
-      <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 12px; color: #ffffff;">
-        <svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
+      <span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-size: 11px; color: #ffffff;">
+        <svg class="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
           <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"></path>
         </svg>
@@ -280,37 +322,21 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
         const error = chrome.runtime.lastError || (res && res.error);
         if (error) {
           showToast(`Dispatch failed: ${error.message || error}`, false);
-          btn.innerHTML = `
-            <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; color: #ffffff;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-              <span>Error</span>
-            </span>
-          `;
+          btn.innerHTML = `<span>Error</span>`;
           btn.style.background = '#dc2626';
         } else {
           showToast(`Sent to Segmenta: "${filename}"`);
-          btn.innerHTML = `
-            <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 12px; color: #ffffff;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              <span>Dispatched</span>
-            </span>
-          `;
+          btn.innerHTML = `<span>Dispatched ✓</span>`;
           btn.style.background = '#059669';
         }
 
         setTimeout(() => {
           btn.innerHTML = `
-            <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; color: #ffffff;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 11px; color: #ffffff;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
               </svg>
-              <span>Download Video</span>
+              <span>Download</span>
             </span>
           `;
           btn.style.background = 'linear-gradient(135deg, #4f46e5, #4338ca)';
@@ -321,32 +347,33 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
 
   container.appendChild(btn);
   container.appendChild(qualitySelect);
+  container.appendChild(closeBtn);
 
   function updatePosition() {
-    if (!document.body.contains(videoEl)) {
+    if (!document.body.contains(videoEl) || videoEl.dataset.segmentaDismissed === 'true') {
       container.remove();
+      activeOverlayMap.delete(videoEl);
       return;
     }
 
-    const rect = videoEl.getBoundingClientRect();
-    if (rect.width < 120 || rect.height < 80 || window.getComputedStyle(videoEl).display === 'none') {
+    const r = videoEl.getBoundingClientRect();
+    if (r.width < 240 || r.height < 140 || window.getComputedStyle(videoEl).display === 'none' || window.getComputedStyle(videoEl).visibility === 'hidden') {
       container.style.display = 'none';
       return;
     }
 
-    // Try anchoring inside player container on YouTube / video platforms if possible
     const playerParent = videoEl.closest('#movie_player') || videoEl.parentElement;
     if (playerParent && window.getComputedStyle(playerParent).position !== 'static') {
       container.style.display = 'flex';
-      container.style.top = '12px';
-      container.style.left = '12px';
+      container.style.top = '10px';
+      container.style.left = '10px';
       if (container.parentElement !== playerParent) {
         playerParent.appendChild(container);
       }
     } else {
       container.style.display = 'flex';
-      container.style.top = `${window.scrollY + rect.top + 10}px`;
-      container.style.left = `${window.scrollX + rect.left + 10}px`;
+      container.style.top = `${window.scrollY + r.top + 8}px`;
+      container.style.left = `${window.scrollX + r.left + 8}px`;
       if (container.parentElement !== document.body) {
         document.body.appendChild(container);
       }
@@ -354,53 +381,34 @@ function injectDownloadOverlay(videoEl: HTMLVideoElement) {
   }
 
   updatePosition();
+  activeOverlayMap.set(videoEl, container);
+
   window.addEventListener('resize', updatePosition);
   window.addEventListener('scroll', updatePosition, { passive: true });
-
-  // Update on play / timeupdate to catch dynamic stream attachments
   videoEl.addEventListener('play', updatePosition);
   videoEl.addEventListener('loadeddata', updatePosition);
 }
 
-// Sniff iframe video players (YouTube, Vimeo, Dailymotion, custom embeds)
-function scanIframePlayers() {
-  const iframes = document.querySelectorAll('iframe');
-  iframes.forEach((iframe) => {
-    const src = iframe.src || iframe.getAttribute('data-src');
-    if (!src) return;
-    const lowerSrc = src.toLowerCase();
-    if (
-      lowerSrc.includes('youtube.com/embed') ||
-      lowerSrc.includes('player.vimeo.com') ||
-      lowerSrc.includes('dailymotion.com/embed') ||
-      lowerSrc.includes('embed')
-    ) {
-      if (iframe.dataset.segmentaIframeInjected) return;
-      iframe.dataset.segmentaIframeInjected = 'true';
-
-      // Send to background for stream registration
-      chrome.runtime.sendMessage({
-        type: 'SNIFFED_MEDIA',
-        url: src,
-        title: document.title || 'Embedded Video Player',
-        pageUrl: window.location.href,
-        mediaType: 'direct',
-      });
-    }
-  });
-}
-
-// Initial scan
+// Scan media elements with debouncing to prevent multi-trigger stacking
+let scanTimeout: any = null;
 function scanMedia() {
-  document.querySelectorAll('video').forEach((v) => injectDownloadOverlay(v as HTMLVideoElement));
-  scanIframePlayers();
+  clearTimeout(scanTimeout);
+  scanTimeout = setTimeout(() => {
+    // Only target visible, substantial video elements
+    const videos = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
+    videos.forEach((v) => {
+      const r = v.getBoundingClientRect();
+      if (r.width >= 240 && r.height >= 140) {
+        injectDownloadOverlay(v);
+      }
+    });
+  }, 300);
 }
 
 scanMedia();
 
-// Mutation observer for dynamically rendered media (SPAs, React/Vue players, VideoJS, JWPlayer, etc.)
+// Observer for dynamic players (SPAs)
 const observer = new MutationObserver(() => {
   scanMedia();
 });
-
 observer.observe(document.body, { childList: true, subtree: true });
