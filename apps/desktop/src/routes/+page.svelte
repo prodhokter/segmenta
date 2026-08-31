@@ -912,13 +912,40 @@
 
       <!-- App Brand Title -->
       <div class="flex items-center gap-2.5">
-        <div class="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 via-primary to-cyan-500 flex items-center justify-center text-white shadow-sm p-1">
-          <svg viewBox="0 0 24 24" class="w-full h-full fill-none stroke-current stroke-[2.5]" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 6H8a4 4 0 0 0-4 4c0 1.5.8 2.8 2 3.5" />
-            <path d="M5 18h11a4 4 0 0 0 4-4c0-1.5-.8-2.8-2-3.5" />
-            <path d="M12 2v4" />
-            <path d="M12 18v4" />
-            <path d="M15 15l-3 3-3-3" />
+        <div class="w-6 h-6 rounded-lg overflow-hidden flex items-center justify-center shadow-sm shrink-0">
+          <svg viewBox="0 0 512 512" fill="none" class="w-full h-full">
+            <defs>
+              <linearGradient id="hdr_seg_grad_1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#6366f1" />
+                <stop offset="50%" stop-color="#4f46e5" />
+                <stop offset="100%" stop-color="#4338ca" />
+              </linearGradient>
+              <linearGradient id="hdr_seg_grad_2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#22d3ee" />
+                <stop offset="50%" stop-color="#06b6d4" />
+                <stop offset="100%" stop-color="#0891b2" />
+              </linearGradient>
+              <linearGradient id="hdr_seg_grad_3" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#34d399" />
+                <stop offset="100%" stop-color="#10b981" />
+              </linearGradient>
+              <linearGradient id="hdr_bg_ambient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0f172a" />
+                <stop offset="100%" stop-color="#020617" />
+              </linearGradient>
+              <filter id="hdr_glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="16" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+            <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#hdr_bg_ambient)" stroke="#1e293b" stroke-width="6" />
+            <path d="M24 160 H488 M24 256 H488 M24 352 H488 M160 24 V488 M256 24 V488 M352 24 V488" stroke="#334155" stroke-opacity="0.15" stroke-width="2" />
+            <path d="M370 120 H190 C145.8 120 110 155.8 110 200 C110 215 114.5 229 122 240 L190 240 C175 230 166 215 166 200 C166 186.7 176.7 176 190 176 H370 C385.5 176 398 163.5 398 148 C398 132.5 385.5 120 370 120 Z" fill="url(#hdr_seg_grad_1)" filter="url(#hdr_glow)" />
+            <path d="M120 270 L340 180 C365 170 395 188 395 215 C395 240 375 260 350 270 L170 340 C145 350 115 332 115 305 C115 285 125 272 120 270 Z" fill="url(#hdr_seg_grad_2)" />
+            <path d="M142 392 H322 C366.2 392 402 356.2 402 312 C402 297 397.5 283 390 272 L322 272 C337 282 346 297 346 312 C346 325.3 335.3 336 322 336 H142 C126.5 336 114 348.5 114 364 C114 379.5 126.5 392 142 392 Z" fill="url(#hdr_seg_grad_3)" filter="url(#hdr_glow)" />
+            <circle cx="410" cy="148" r="14" fill="#818cf8" />
+            <circle cx="395" cy="215" r="16" fill="#22d3ee" />
+            <circle cx="102" cy="364" r="14" fill="#34d399" />
           </svg>
         </div>
         <span class="font-extrabold text-sm text-heading dark:text-white tracking-tight hidden sm:inline">
