@@ -25,6 +25,8 @@
     Calendar
   } from 'lucide-svelte';
 
+  import { t, getLanguage, type LanguageCode } from '$lib/i18n';
+
   import { invoke } from '@tauri-apps/api/core';
 
   // Tauri invoke helper with safe browser fallback
@@ -40,6 +42,7 @@
     return mockInvoke<T>(cmd, args);
   }
 
+  let currentLang = $state<LanguageCode>(getLanguage());
   let tasks: TaskRecord[] = $state([]);
   let selectedTaskId: string | null = $state(null);
   let selectedSegments: SegmentRecord[] = $state([]);
@@ -56,6 +59,7 @@
     speed_limit_kb: 0,
     theme: 'system',
     auto_categorize: true,
+    language: 'en',
   });
 
   // Mock store for web preview & demo simulation
@@ -342,6 +346,9 @@
 
   async function handleSaveSettings(newSettings: AppSettings) {
     settings = newSettings;
+    if (newSettings.language) {
+      currentLang = newSettings.language as LanguageCode;
+    }
     applyTheme(newSettings.theme);
     await invokeCommand('save_settings', { settings: newSettings });
     await refreshTasks();
@@ -429,13 +436,13 @@
       <!-- Speed Limiter Quick Config -->
       <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated border border-border-light dark:border-border-dark text-xs">
         <Wifi class="w-3.5 h-3.5 text-secondary" />
-        <span class="text-subtle dark:text-slate-400 font-medium">Throttler:</span>
+        <span class="text-subtle dark:text-slate-400 font-medium">{t('nav.throttler', currentLang)}</span>
         <select
           value={settings.speed_limit_kb}
           onchange={(e) => handleSpeedLimitChange(Number((e.target as HTMLSelectElement).value))}
           class="bg-transparent font-mono font-semibold text-heading dark:text-white focus:outline-none cursor-pointer"
         >
-          <option value={0} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">Unlimited</option>
+          <option value={0} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">{t('nav.unlimited', currentLang)}</option>
           <option value={1024} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">1 MB/s</option>
           <option value={5120} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">5 MB/s</option>
           <option value={10240} class="bg-surface dark:bg-surface-dark text-heading dark:text-white">10 MB/s</option>
@@ -447,10 +454,10 @@
       <button
         onclick={() => (isSchedulerModalOpen = true)}
         class="px-3 py-1.5 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-heading dark:text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
-        title="Schedule Downloads"
+        title={t('nav.schedule', currentLang)}
       >
         <Calendar class="w-3.5 h-3.5 text-secondary" />
-        Schedule
+        {t('nav.schedule', currentLang)}
         {#if scheduledTasks.length > 0}
           <span class="ml-1 px-1.5 py-0.2 bg-secondary/15 dark:bg-secondary/25 text-secondary text-[10px] rounded-full font-mono font-bold">
             {scheduledTasks.length}
@@ -462,7 +469,7 @@
       <button
         onclick={() => (isSettingsModalOpen = true)}
         class="p-2 rounded-lg bg-surface-elevated dark:bg-surface-darkelevated hover:bg-slate-100 dark:hover:bg-zinc-800 border border-border-light dark:border-border-dark text-subtle dark:text-slate-400 hover:text-heading dark:hover:text-white transition-all shadow-sm"
-        title="Preferences & Settings"
+        title={t('nav.settings', currentLang)}
       >
         <Settings class="w-4 h-4" />
       </button>
@@ -473,7 +480,7 @@
         class="px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
       >
         <Plus class="w-4 h-4" />
-        New Download
+        {t('nav.new_download', currentLang)}
       </button>
     </div>
   </header>
