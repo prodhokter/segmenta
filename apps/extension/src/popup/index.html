@@ -21,6 +21,7 @@
         --brand-accent: #06b6d4;
         --success: #10b981;
         --danger: #ef4444;
+        --warning: #f59e0b;
       }
 
       * {
@@ -30,7 +31,7 @@
       }
 
       body {
-        width: 320px;
+        width: 360px;
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         background-color: var(--bg-color);
         color: var(--text-primary);
@@ -56,8 +57,8 @@
       }
 
       .logo-icon {
-        width: 22px;
-        height: 22px;
+        width: 24px;
+        height: 24px;
         border-radius: 6px;
         background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
         display: flex;
@@ -65,7 +66,8 @@
         justify-content: center;
         color: white;
         font-weight: 800;
-        font-size: 11px;
+        font-size: 12px;
+        box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
       }
 
       .brand-name {
@@ -80,7 +82,7 @@
         gap: 5px;
         font-size: 11px;
         font-weight: 600;
-        padding: 2px 8px;
+        padding: 3px 8px;
         border-radius: 12px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--text-secondary);
@@ -95,18 +97,28 @@
 
       .status-pill.online {
         color: var(--success);
-        background: rgba(16, 185, 129, 0.1);
+        background: rgba(16, 185, 129, 0.12);
+        border: 1px solid rgba(16, 185, 129, 0.2);
       }
       .status-pill.online .status-dot {
         background-color: var(--success);
+        box-shadow: 0 0 6px var(--success);
       }
 
       .status-pill.offline {
         color: var(--danger);
-        background: rgba(239, 68, 68, 0.1);
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.2);
       }
       .status-pill.offline .status-dot {
         background-color: var(--danger);
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
       }
 
       .section-title {
@@ -115,7 +127,15 @@
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--text-secondary);
-        margin-bottom: 8px;
+      }
+
+      .badge-count {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 10px;
+        background: var(--brand-primary);
+        color: white;
       }
 
       .card {
@@ -126,15 +146,72 @@
         margin-bottom: 12px;
       }
 
-      .stats-row {
+      /* Switch toggle styles */
+      .toggle-row {
         display: flex;
+        align-items: center;
         justify-content: space-between;
-        font-size: 12px;
       }
 
-      .mono {
-        font-family: 'JetBrains Mono', monospace;
+      .toggle-info {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .toggle-label {
         font-weight: 600;
+        font-size: 12px;
+        color: var(--text-primary);
+      }
+
+      .toggle-desc {
+        font-size: 10px;
+        color: var(--text-secondary);
+      }
+
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 38px;
+        height: 20px;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #3f3f46;
+        transition: 0.2s;
+        border-radius: 20px;
+      }
+
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.2s;
+        border-radius: 50%;
+      }
+
+      input:checked + .slider {
+        background-color: var(--brand-primary);
+      }
+
+      input:checked + .slider:before {
+        transform: translateX(18px);
       }
 
       .btn {
@@ -151,41 +228,110 @@
         font-size: 12px;
         font-weight: 600;
         cursor: pointer;
-        transition: background 0.15s ease;
+        transition: all 0.15s ease;
       }
 
       .btn:hover {
         background: #4338ca;
       }
 
-      .recent-list {
+      .stream-list {
         display: flex;
         flex-direction: column;
         gap: 6px;
+        max-height: 160px;
+        overflow-y: auto;
       }
 
-      .recent-item {
+      .stream-item {
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 6px 8px;
         background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 6px;
         font-size: 11px;
+        gap: 6px;
       }
 
-      .recent-title {
+      .stream-item:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(99, 102, 241, 0.3);
+      }
+
+      .stream-info {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        flex: 1;
+      }
+
+      .stream-title {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 200px;
         color: var(--text-primary);
+        font-weight: 500;
+      }
+
+      .stream-meta {
+        font-size: 10px;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .stream-tag {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 4px;
+        border-radius: 4px;
+        text-transform: uppercase;
+      }
+
+      .stream-tag.hls {
+        background: rgba(6, 182, 212, 0.15);
+        color: var(--brand-accent);
+      }
+
+      .stream-tag.dash {
+        background: rgba(245, 158, 11, 0.15);
+        color: var(--warning);
+      }
+
+      .stream-tag.direct {
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--success);
+      }
+
+      .stream-tag.chunk {
+        background: rgba(148, 163, 184, 0.15);
+        color: var(--text-secondary);
+      }
+
+      .btn-download-stream {
+        background: #4f46e5;
+        border: none;
+        color: white;
+        border-radius: 4px;
+        padding: 3px 8px;
+        font-size: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s ease;
+      }
+
+      .btn-download-stream:hover {
+        background: #4338ca;
       }
 
       .empty-state {
         text-align: center;
         color: var(--text-secondary);
-        font-size: 12px;
+        font-size: 11px;
         padding: 12px 0;
       }
     </style>
@@ -198,30 +344,49 @@
       </div>
       <div id="status-badge" class="status-pill offline">
         <span class="status-dot"></span>
-        <span id="status-text">Connecting...</span>
+        <span id="status-text">Desktop Offline</span>
       </div>
     </div>
 
+    <!-- Interception Toggle Card -->
     <div class="card">
-      <div class="stats-row">
-        <span>Engine Bridge:</span>
-        <span id="engine-version" class="mono text-secondary">Native IPC</span>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-label">Auto-Interception</span>
+          <span class="toggle-desc">Capture browser file downloads</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-auto-intercept" checked />
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
-    <div class="section-title">Quick Actions</div>
+    <!-- Active Tab Detected Streams -->
+    <div class="section-header">
+      <div class="section-title">Detected Media (Active Tab)</div>
+      <span id="stream-count" class="badge-count">0</span>
+    </div>
+    <div class="card" style="padding: 6px;">
+      <div id="stream-container" class="stream-list">
+        <div class="empty-state">No media streams sniffed on this tab.</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
     <button id="btn-download-tab" class="btn" style="margin-bottom: 12px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-        <polyline points="7 10 12 15 17 10"></polyline>
-        <line x1="12" y1="15" x2="12" y2="3"></line>
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
       </svg>
-      Grab Active Tab Video / Audio
+      Grab Video / Audio on Page
     </button>
 
-    <div class="section-title">Recent Handled Downloads</div>
-    <div class="card">
-      <div id="recent-container" class="recent-list">
+    <!-- Recent Captured Downloads -->
+    <div class="section-header">
+      <div class="section-title">Recent Handled Downloads</div>
+    </div>
+    <div class="card" style="padding: 6px; margin-bottom: 0;">
+      <div id="recent-container" class="stream-list">
         <div class="empty-state">No downloads intercepted yet.</div>
       </div>
     </div>
